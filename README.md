@@ -1,30 +1,59 @@
-# Telegram bot dashboard
+# Receipt AI — In-Browser WebGPU Vision Scanner
 
-*Automatically synced with your [v0.app](https://v0.app) deployments*
+A private, client-side receipt and invoice data extractor powered by WebGPU and in-browser AI vision models. **100% serverless, zero external API costs, and deployable as a static site on GitHub Pages.**
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/osos3loms-projects/receipttelegrambot)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.app-black?style=for-the-badge)](https://v0.app/chat/dJ0CF1j3zxD)
+---
 
-## Overview
+## ⚡ Features
 
-This repository will stay in sync with your deployed chats on [v0.app](https://v0.app).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.app](https://v0.app).
+- **🚀 WebGPU Hardware Acceleration**: Runs AI vision inference locally inside your browser with automatic CPU/WASM fallback.
+- **🔒 100% Private**: Your receipt photos and financial documents never leave your browser or device.
+- **💾 Browser Storage Caching**: Model weights (~48 MB) are cached locally in the browser Cache API / IndexedDB. Repeat visits initialize immediately without re-downloading.
+- **📄 Interactive 3-Step Demo**:
+  1. **Download & Start Model**: Real-time download progress bar and WebGPU shader pre-warming.
+  2. **Upload Receipt**: Drag & drop, camera capture, file upload, or 1-click test samples (Arabic & English tax invoices).
+  3. **Extract & Copy**: Structured breakdown of Store/Vendor, Date, Subtotal, VAT (rate & amount), Total, and Currency with 1-click copy options (**JSON**, **Summary Text**, **Table**).
+- **🌐 Static GitHub Pages Ready**: Built with `output: 'export'`, single-threaded WASM fallback for environments without COOP/COEP headers, and automated GitHub Actions deployment.
 
-## Deployment
+---
 
-Your project is live at:
+## 🏗️ Architecture
 
-**[https://vercel.com/osos3loms-projects/receipttelegrambot](https://vercel.com/osos3loms-projects/receipttelegrambot)**
+```mermaid
+flowchart TD
+    User([User]) -->|Step 1: Download/Start| ModelInit[Browser Cache / WebGPU Session]
+    ModelInit -->|Store Weights| Cache[(Browser Cache API)]
+    User -->|Step 2: Upload / Camera / Sample| Canvas[Image / Canvas Preview]
+    Canvas -->|Step 3: WebGPU Inference| Runner[lib/webgpu-vision.ts]
+    Runner -->|OCR Raw Tokens| Parser[lib/receipt-parser.ts]
+    Parser -->|Structured JSON / Text / Metrics| Output[Result Display & 1-Click Copy]
+```
 
-## Build your app
+---
 
-Continue building your app on:
+## 🚀 Getting Started
 
-**[https://v0.app/chat/dJ0CF1j3zxD](https://v0.app/chat/dJ0CF1j3zxD)**
+### Local Development
+```bash
+# Install dependencies
+npm install --legacy-peer-deps
 
-## How It Works
+# Start development server
+npm run dev
+```
+Open [http://localhost:3000](http://localhost:3000) to view the demo.
 
-1. Create and modify your project using [v0.app](https://v0.app)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+### Static Build (for GitHub Pages / Static Hosting)
+```bash
+npm run build
+```
+The static website is exported to the `out/` directory, ready to deploy to GitHub Pages, Cloudflare Pages, Netlify, or Vercel.
+
+---
+
+## 📦 GitHub Pages Deployment
+
+The automated workflow is configured at [`.github/workflows/pages.yml`](.github/workflows/pages.yml):
+1. Push to `main` or `master`.
+2. In your GitHub repository settings, go to **Settings > Pages > Build and deployment > Source** and select **GitHub Actions**.
+3. Your static WebGPU receipt scanner will be live at `https://<username>.github.io/<repo>/`!

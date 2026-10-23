@@ -2,16 +2,14 @@ import type React from "react"
 import type { Metadata } from "next"
 import { Inter, Playfair_Display } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
-import { AuthProvider } from "@/lib/auth-context"
 import "./globals.css"
 
 const _inter = Inter({ subsets: ["latin"] })
 const _playfair = Playfair_Display({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Receipt Tracker - Telegram Bot",
-  description: "Track your receipts with Telegram Bot integration",
-    generator: 'v0.app'
+  title: "Receipt AI — In-Browser WebGPU Vision Scanner",
+  description: "Extract receipt and invoice data privately in your browser using client-side WebGPU AI models.",
 }
 
 export default function RootLayout({
@@ -21,8 +19,8 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`font-sans antialiased`}>
-        <AuthProvider>{children}</AuthProvider>
+      <body className="font-sans antialiased">
+        {children}
         <Analytics />
       </body>
     </html>

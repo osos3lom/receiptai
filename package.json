@@ -1,5 +1,5 @@
 {
-  "name": "my-v0-project",
+  "name": "receipt-ai-scanner",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@google-cloud/vision": "4.3.2",
+    "@huggingface/transformers": "^3.3.3",
     "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-accordion": "1.2.2",
     "@radix-ui/react-alert-dialog": "1.1.4",
@@ -45,7 +46,6 @@
     "cmdk": "1.0.4",
     "date-fns": "4.1.0",
     "embla-carousel-react": "8.5.1",
-    "firebase": "12.7.0",
     "googleapis": "169.0.0",
     "input-otp": "1.4.1",
     "lucide-react": "^0.454.0",
