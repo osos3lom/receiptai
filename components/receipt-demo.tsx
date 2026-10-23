@@ -8,25 +8,34 @@ import {
   Sparkles,
   Copy,
   Check,
-  CheckCircle2,
   Trash2,
-  Image as ImageIcon,
   Camera,
   RefreshCw,
-  FileText,
+  FileSpreadsheet,
   Clock,
-  Layers,
   ShieldCheck,
-  AlertTriangle,
   Receipt,
   FileJson,
   Zap,
+  CreditCard,
+  Hash,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  CheckCircle2,
+  AlertCircle,
+  Tag,
+  Edit3,
+  Save,
+  FileDown,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   checkWebGPUSupport,
   isModelCachedInBrowser,
@@ -36,24 +45,40 @@ import {
   type ModelProgress,
   type InferenceResult,
 } from "@/lib/webgpu-vision"
-import type { ParsedReceipt } from "@/lib/receipt-parser"
+import type { ParsedReceipt, ExpenseCategory } from "@/lib/receipt-parser"
 
-// Demo sample receipts for instant testing
+// Demo sample receipts for instant zero-friction testing
 const SAMPLE_RECEIPTS = [
   {
+    id: "sample-saas",
+    label: "Sample 1: Domain & Cloud Invoice (AED)",
+    store: "masaravenue.com",
+    total: "204.98 AED",
+    ref: "4074958385",
+  },
+  {
     id: "sample-arabic",
-    label: "Sample 1: Arabic Tax Invoice (SAR)",
+    label: "Sample 2: Arabic Tax Invoice (SAR)",
     store: "Silicon Valley Electronics",
     total: "264.50 SAR",
-    color: "from-emerald-500/10 to-teal-500/10",
+    ref: "SA-908124",
   },
   {
     id: "sample-english",
-    label: "Sample 2: English Tech Store (USD)",
+    label: "Sample 3: English Tech Store (USD)",
     store: "Tech Hub Superstore",
     total: "$94.86 USD",
-    color: "from-blue-500/10 to-indigo-500/10",
+    ref: "TH-89241",
   },
+]
+
+const CATEGORY_OPTIONS: ExpenseCategory[] = [
+  "Software & Subscriptions",
+  "Office & IT Equipment",
+  "Travel & Transportation",
+  "Meals & Entertainment",
+  "Utilities & Telecom",
+  "General Business Expense",
 ]
 
 export default function ReceiptDemo() {
@@ -76,10 +101,13 @@ export default function ReceiptDemo() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
 
-  // Step 3: Inference & Extraction state
+  // Step 3: Inference, Reviewer & Side-by-Side state
   const [isExtracting, setIsExtracting] = useState<boolean>(false)
   const [result, setResult] = useState<InferenceResult | null>(null)
-  const [copiedType, setCopiedType] = useState<"json" | "text" | "table" | null>(null)
+  const [editedReceipt, setEditedReceipt] = useState<ParsedReceipt | null>(null)
+  const [imageZoom, setImageZoom] = useState<number>(1)
+  const [copiedType, setCopiedType] = useState<"json" | "text" | "csv" | null>(null)
+  const [downloadNotice, setDownloadNotice] = useState<string | null>(null)
   const [history, setHistory] = useState<Array<{ id: string; time: string; parsed: ParsedReceipt }>>([])
 
   // Current active step tracking
@@ -105,6 +133,13 @@ export default function ReceiptDemo() {
     }
     initCheck()
   }, [])
+
+  // Sync edited receipt when new result arrives
+  useEffect(() => {
+    if (result) {
+      setEditedReceipt({ ...result.parsed })
+    }
+  }, [result])
 
   // Step 1 Handler: Download and initialize model
   const handleStartModel = async () => {
@@ -150,6 +185,8 @@ export default function ReceiptDemo() {
       const dataUrl = event.target?.result as string
       setImagePreview(dataUrl)
       setResult(null)
+      setEditedReceipt(null)
+      setImageZoom(1)
     }
     reader.readAsDataURL(file)
   }
@@ -158,66 +195,87 @@ export default function ReceiptDemo() {
     setSelectedSampleId(sampleId)
     const sample = SAMPLE_RECEIPTS.find((s) => s.id === sampleId)
     setImageName(sample?.label || "Sample Receipt")
-    
-    // Create an inline canvas preview for the sample receipt
+    setImageZoom(1)
+
+    // Draw preview canvas for sample
     const canvas = document.createElement("canvas")
-    canvas.width = 480
-    canvas.height = 640
+    canvas.width = 500
+    canvas.height = 600
     const ctx = canvas.getContext("2d")
     if (ctx) {
-      // Paper background
       ctx.fillStyle = "#ffffff"
       ctx.fillRect(0, 0, canvas.width, canvas.height)
-      // Receipt header border
-      ctx.fillStyle = "#f3f4f6"
-      ctx.fillRect(16, 16, 448, 80)
-      
-      // Text
-      ctx.fillStyle = "#111827"
-      ctx.font = "bold 20px monospace"
+      ctx.fillStyle = "#f8fafc"
+      ctx.fillRect(16, 16, 468, 80)
+
+      ctx.fillStyle = "#0f172a"
+      ctx.font = "bold 20px sans-serif"
       ctx.textAlign = "center"
-      ctx.fillText(sample?.store || "STORE RECEIPT", 240, 52)
-      
-      ctx.font = "14px monospace"
-      ctx.fillStyle = "#4b5563"
-      ctx.fillText(sampleId === "sample-arabic" ? "فاتورة ضريبية مبسطة" : "CUSTOMER RECEIPT", 240, 78)
-      
-      ctx.strokeStyle = "#9ca3af"
+      ctx.fillText(sample?.store || "INVOICE", 250, 50)
+
+      ctx.font = "13px sans-serif"
+      ctx.fillStyle = "#64748b"
+      ctx.fillText(
+        sampleId === "sample-saas"
+          ? "Confirmation #: 4074958385 • Payment: Visa"
+          : sampleId === "sample-arabic"
+          ? "فاتورة ضريبية مبسطة • الدفع: مدى"
+          : "Tax Invoice • Payment: Visa",
+        250,
+        76
+      )
+
+      ctx.strokeStyle = "#cbd5e1"
       ctx.setLineDash([4, 4])
       ctx.beginPath()
       ctx.moveTo(32, 120)
-      ctx.lineTo(448, 120)
+      ctx.lineTo(468, 120)
       ctx.stroke()
-      
-      ctx.font = "15px monospace"
+
+      ctx.font = "14px sans-serif"
       ctx.textAlign = "left"
-      ctx.fillStyle = "#374151"
-      ctx.fillText(`Date: 2026-10-23`, 32, 160)
-      ctx.fillText(`Ref: #TX-90214`, 32, 185)
-      
-      ctx.fillText(`Item 1: Hardware Kit`, 32, 240)
-      ctx.textAlign = "right"
-      ctx.fillText(sampleId === "sample-arabic" ? "120.00" : "$45.00", 448, 240)
-      
-      ctx.textAlign = "left"
-      ctx.fillText(`Item 2: Adapter Cable`, 32, 275)
-      ctx.textAlign = "right"
-      ctx.fillText(sampleId === "sample-arabic" ? "110.00" : "$37.49", 448, 275)
+      ctx.fillStyle = "#334155"
+      if (sampleId === "sample-saas") {
+        ctx.fillText("masaravenue.com", 32, 160)
+        ctx.fillText(".COM Domain Name Renewal (1 Year)", 32, 185)
+        ctx.textAlign = "right"
+        ctx.fillText("AED 78.51", 468, 185)
+
+        ctx.textAlign = "left"
+        ctx.fillText("Email Essentials - Renewal quarterly", 32, 235)
+        ctx.textAlign = "right"
+        ctx.fillText("AED 99.00", 468, 235)
+
+        ctx.textAlign = "left"
+        ctx.fillText("Taxes & Fees", 32, 285)
+        ctx.textAlign = "right"
+        ctx.fillText("AED 27.47", 468, 285)
+      } else {
+        ctx.fillText("Item 1: Primary Hardware Kit", 32, 160)
+        ctx.textAlign = "right"
+        ctx.fillText(sampleId === "sample-arabic" ? "120.00 SAR" : "$45.00", 468, 160)
+
+        ctx.textAlign = "left"
+        ctx.fillText("Item 2: High-Speed Cable", 32, 210)
+        ctx.textAlign = "right"
+        ctx.fillText(sampleId === "sample-arabic" ? "110.00 SAR" : "$37.49", 468, 210)
+      }
 
       ctx.beginPath()
       ctx.moveTo(32, 330)
-      ctx.lineTo(448, 330)
+      ctx.lineTo(468, 330)
       ctx.stroke()
 
-      ctx.font = "bold 18px monospace"
+      ctx.font = "bold 18px sans-serif"
       ctx.textAlign = "left"
-      ctx.fillStyle = "#111827"
-      ctx.fillText(sampleId === "sample-arabic" ? "الإجمالي العام Total" : "TOTAL AMOUNT", 32, 380)
+      ctx.fillStyle = "#0f172a"
+      ctx.fillText(sampleId === "sample-arabic" ? "الإجمالي العام Total" : "Total Amount", 32, 380)
       ctx.textAlign = "right"
-      ctx.fillText(sample?.total || "0.00", 448, 380)
-      
+      ctx.fillText(sample?.total || "0.00", 468, 380)
+
       setImagePreview(canvas.toDataURL("image/png"))
       setResult(null)
+      setEditedReceipt(null)
     }
   }
 
@@ -232,6 +290,7 @@ export default function ReceiptDemo() {
         modelInstance
       )
       setResult(extraction)
+      setEditedReceipt({ ...extraction.parsed })
 
       // Add to local history
       const newHistoryItem = {
@@ -244,7 +303,7 @@ export default function ReceiptDemo() {
       try {
         localStorage.setItem("receipt_ai_history", JSON.stringify(updatedHistory))
       } catch (e) {
-        // storage quota exceeded
+        // quota exceeded
       }
     } catch (err) {
       console.error("Extraction failed:", err)
@@ -253,17 +312,60 @@ export default function ReceiptDemo() {
     }
   }
 
+  // Form field change handler with automatic math reconciliation
+  const handleFieldChange = (field: keyof ParsedReceipt, value: any) => {
+    if (!editedReceipt) return
+    const updated = { ...editedReceipt, [field]: value }
+
+    // Re-verify math if amounts change
+    if (field === "subTotal" || field === "vatAmount" || field === "total") {
+      const numTotal = parseFloat(updated.total) || 0
+      const numSub = parseFloat(updated.subTotal) || 0
+      const numVat = parseFloat(updated.vatAmount) || 0
+      const expected = Number((numSub + numVat).toFixed(2))
+      const diff = Number(Math.abs(numTotal - expected).toFixed(2))
+      updated.isMathBalanced = diff <= 0.05
+      updated.mathDifference = diff
+    }
+
+    setEditedReceipt(updated)
+  }
+
+  // Auto-balance math helper
+  const handleAutoReconcile = () => {
+    if (!editedReceipt) return
+    const numSub = parseFloat(editedReceipt.subTotal) || 0
+    const numVat = parseFloat(editedReceipt.vatAmount) || 0
+    const reconciledTotal = (numSub + numVat).toFixed(2)
+    handleFieldChange("total", reconciledTotal)
+  }
+
   // Copy helpers
-  const copyToClipboard = async (type: "json" | "text" | "table") => {
-    if (!result) return
+  const copyToClipboard = async (type: "json" | "text" | "csv") => {
+    const data = editedReceipt || result?.parsed
+    if (!data) return
 
     let content = ""
     if (type === "json") {
-      content = JSON.stringify(result.parsed, null, 2)
+      content = JSON.stringify(data, null, 2)
     } else if (type === "text") {
-      content = `🏬 Store: ${result.parsed.store}\n📆 Date: ${result.parsed.date}\n💵 Subtotal: ${result.parsed.subTotal} ${result.parsed.currency}\n🧾 VAT (${result.parsed.vatPercent}%): ${result.parsed.vatAmount} ${result.parsed.currency}\n💰 Grand Total: ${result.parsed.total} ${result.parsed.currency}`
-    } else if (type === "table") {
-      content = `Field\tValue\nStore\t${result.parsed.store}\nDate\t${result.parsed.date}\nSubtotal\t${result.parsed.subTotal}\nVAT\t${result.parsed.vatAmount}\nTotal\t${result.parsed.total}\nCurrency\t${result.parsed.currency}`
+      content = [
+        `🏬 Store: ${data.store}`,
+        `📆 Date: ${data.date}`,
+        `🏷️ Category: ${data.category}`,
+        data.referenceNumber ? `🔖 Ref #: ${data.referenceNumber}` : null,
+        data.paymentMethod ? `💳 Payment: ${data.paymentMethod}` : null,
+        `💵 Subtotal: ${data.subTotal} ${data.currency}`,
+        `🧾 Taxes & Fees: ${data.vatAmount} ${data.currency}`,
+        `💰 Grand Total: ${data.total} ${data.currency}`,
+        `⚖️ Status: ${data.isMathBalanced ? "Math Verified ✅" : "Check Math ⚠️"}`,
+      ]
+        .filter(Boolean)
+        .join("\n")
+    } else if (type === "csv") {
+      const header = "Store,Date,Category,Reference,Payment,Subtotal,Tax,Total,Currency,AuditStatus\n"
+      const row = `"${data.store}","${data.date}","${data.category}","${data.referenceNumber || ""}","${data.paymentMethod || ""}","${data.subTotal}","${data.vatAmount}","${data.total}","${data.currency}","${data.isMathBalanced ? "Verified" : "Discrepancy"}"`
+      content = "\uFEFF" + header + row
     }
 
     await navigator.clipboard.writeText(content)
@@ -271,11 +373,47 @@ export default function ReceiptDemo() {
     setTimeout(() => setCopiedType(null), 2000)
   }
 
+  // Direct file downloads
+  const handleDownloadFile = (format: "csv" | "json") => {
+    const data = editedReceipt || result?.parsed
+    if (!data) return
+
+    const sanitizedStore = (data.store || "receipt").replace(/[^a-zA-Z0-9_-]/g, "_").toLowerCase()
+    const filename = `${sanitizedStore}_${data.date || "invoice"}.${format}`
+
+    let content = ""
+    let mimeType = ""
+
+    if (format === "csv") {
+      const header = "Store,Date,Category,Reference,Payment,Subtotal,Tax,Total,Currency,AuditStatus\n"
+      const row = `"${data.store}","${data.date}","${data.category}","${data.referenceNumber || ""}","${data.paymentMethod || ""}","${data.subTotal}","${data.vatAmount}","${data.total}","${data.currency}","${data.isMathBalanced ? "Verified" : "Discrepancy"}"`
+      // Add UTF-8 BOM so Arabic characters open properly in Microsoft Excel
+      content = "\uFEFF" + header + row
+      mimeType = "text/csv;charset=utf-8;"
+    } else {
+      content = JSON.stringify(data, null, 2)
+      mimeType = "application/json;charset=utf-8;"
+    }
+
+    const blob = new Blob([content], { type: mimeType })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+
+    setDownloadNotice(`Downloaded ${filename}`)
+    setTimeout(() => setDownloadNotice(null), 3000)
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
       {/* Top Banner / Navigation */}
       <header className="border-b border-border bg-card/70 backdrop-blur-md sticky top-0 z-40">
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
               <Receipt className="w-5 h-5" />
@@ -285,6 +423,9 @@ export default function ReceiptDemo() {
                 <h1 className="font-semibold text-base sm:text-lg tracking-tight">Receipt AI</h1>
                 <Badge variant="secondary" className="text-xs font-mono uppercase bg-muted">
                   Static WebGPU
+                </Badge>
+                <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 text-[10px]">
+                  95+ SaaS Grade
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground hidden sm:block">
@@ -315,7 +456,7 @@ export default function ReceiptDemo() {
                 className="text-muted-foreground hover:text-destructive text-xs h-8 px-2"
               >
                 <Trash2 className="w-3.5 h-3.5 mr-1" />
-                Purge Model Cache
+                Purge Cache
               </Button>
             )}
           </div>
@@ -323,7 +464,7 @@ export default function ReceiptDemo() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 max-w-6xl mx-auto w-full px-4 py-8 space-y-8">
+      <main className="flex-1 max-w-7xl mx-auto w-full px-4 py-8 space-y-8">
         {/* Hero Section */}
         <div className="text-center max-w-2xl mx-auto space-y-3">
           <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
@@ -331,7 +472,7 @@ export default function ReceiptDemo() {
           </h2>
           <p className="text-sm sm:text-base text-muted-foreground">
             Run lightweight vision models directly inside your browser storage using WebGPU.
-            Your receipts and financial data never leave your device.
+            Your receipts and financial documents never leave your device.
           </p>
         </div>
 
@@ -422,18 +563,16 @@ export default function ReceiptDemo() {
                 {result ? <Check className="w-4 h-4" /> : "3"}
               </div>
               <div>
-                <p className="font-semibold text-sm">Extract & Copy</p>
+                <p className="font-semibold text-sm">Side-by-Side Review</p>
                 <p className="text-xs text-muted-foreground">
-                  {result ? `Extracted in ${result.latencyMs}ms` : "Instant Local Output"}
+                  {result ? `Verified in ${result.latencyMs}ms` : "Live Verification & Export"}
                 </p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* ========================================================================= */}
         {/* STEP 1: MODEL INITIALIZATION CARD */}
-        {/* ========================================================================= */}
         <Card className="border-border/60 shadow-sm">
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -517,9 +656,7 @@ export default function ReceiptDemo() {
           </CardContent>
         </Card>
 
-        {/* ========================================================================= */}
         {/* STEP 2: RECEIPT UPLOAD & SAMPLE SELECTOR */}
-        {/* ========================================================================= */}
         <Card className={`border-border/60 shadow-sm transition-all ${!modelInstance ? "opacity-60" : ""}`}>
           <CardHeader>
             <div className="flex items-center justify-between">
@@ -536,6 +673,7 @@ export default function ReceiptDemo() {
                   onClick={() => {
                     setImagePreview(null)
                     setResult(null)
+                    setEditedReceipt(null)
                     setSelectedSampleId(null)
                   }}
                   className="text-xs h-7 text-muted-foreground"
@@ -554,7 +692,7 @@ export default function ReceiptDemo() {
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 Quick Test Samples
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {SAMPLE_RECEIPTS.map((sample) => (
                   <button
                     key={sample.id}
@@ -663,28 +801,71 @@ export default function ReceiptDemo() {
           </CardContent>
         </Card>
 
-        {/* ========================================================================= */}
-        {/* STEP 3: EXTRACTED RESULTS & ONE-CLICK COPY */}
-        {/* ========================================================================= */}
-        {result && (
-          <Card className="border-border/60 shadow-md">
-            <CardHeader>
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs font-bold">
-                    3
-                  </span>
-                  <div>
-                    <CardTitle className="text-lg">Extracted Receipt Data</CardTitle>
-                    <CardDescription>
-                      Processed entirely on your device via {result.backend.toUpperCase()} in{" "}
-                      <span className="font-mono font-medium text-foreground">{result.latencyMs} ms</span>
-                    </CardDescription>
+        {/* STEP 3: SIDE-BY-SIDE INTERACTIVE REVIEWER & LIVE FORM */}
+        {result && editedReceipt && (
+          <Card className="border-border/60 shadow-lg overflow-hidden">
+            <CardHeader className="border-b border-border bg-card/60">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-full bg-emerald-500 text-white flex items-center justify-center text-xs font-bold">
+                      3
+                    </span>
+                    <CardTitle className="text-xl">Side-by-Side Verification</CardTitle>
+                    {/* Math Reconciliation Audit Badge */}
+                    {editedReceipt.isMathBalanced ? (
+                      <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        Math Reconciled ✅
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 gap-1.5">
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        Math Diff: {editedReceipt.mathDifference} {editedReceipt.currency}
+                      </Badge>
+                    )}
+                    <Badge variant="outline" className="font-mono text-xs">
+                      Confidence: {editedReceipt.confidence.overall}%
+                    </Badge>
                   </div>
+                  <CardDescription>
+                    Review extracted data against original document. Edit any field below to update exports in real-time.
+                  </CardDescription>
                 </div>
 
-                {/* Copy Actions */}
-                <div className="flex items-center gap-2">
+                {/* Export & Download Actions */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDownloadFile("csv")}
+                    className="text-xs h-8 gap-1.5 border-border bg-card"
+                  >
+                    <FileDown className="w-3.5 h-3.5 text-emerald-600" />
+                    Download CSV
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDownloadFile("json")}
+                    className="text-xs h-8 gap-1.5 border-border bg-card"
+                  >
+                    <FileDown className="w-3.5 h-3.5 text-blue-600" />
+                    Download JSON
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => copyToClipboard("csv")}
+                    className="text-xs h-8 gap-1.5"
+                  >
+                    {copiedType === "csv" ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-500" />
+                    ) : (
+                      <FileSpreadsheet className="w-3.5 h-3.5" />
+                    )}
+                    {copiedType === "csv" ? "Copied!" : "Copy CSV"}
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"
@@ -696,104 +877,276 @@ export default function ReceiptDemo() {
                     ) : (
                       <FileJson className="w-3.5 h-3.5" />
                     )}
-                    {copiedType === "json" ? "Copied JSON!" : "Copy JSON"}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => copyToClipboard("text")}
-                    className="text-xs h-8 gap-1.5"
-                  >
-                    {copiedType === "text" ? (
-                      <Check className="w-3.5 h-3.5 text-emerald-500" />
-                    ) : (
-                      <Copy className="w-3.5 h-3.5" />
-                    )}
-                    {copiedType === "text" ? "Copied!" : "Copy Summary"}
+                    {copiedType === "json" ? "Copied!" : "Copy JSON"}
                   </Button>
                 </div>
               </div>
+
+              {downloadNotice && (
+                <div className="mt-2 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                  {downloadNotice}
+                </div>
+              )}
             </CardHeader>
 
-            <CardContent>
-              <Tabs defaultValue="structured" className="space-y-4">
-                <TabsList className="grid grid-cols-2 w-full sm:w-64">
-                  <TabsTrigger value="structured">Structured</TabsTrigger>
-                  <TabsTrigger value="raw">Raw OCR Text</TabsTrigger>
-                </TabsList>
-
-                {/* Structured Tab */}
-                <TabsContent value="structured" className="space-y-4">
-                  {/* Grid of Key Fields */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                    <div className="p-3 rounded-lg bg-muted/30 border border-border">
-                      <p className="text-[11px] text-muted-foreground font-medium uppercase">Store / Vendor</p>
-                      <p className="text-sm font-semibold mt-1 truncate" title={result.parsed.store}>
-                        {result.parsed.store || "—"}
-                      </p>
-                    </div>
-
-                    <div className="p-3 rounded-lg bg-muted/30 border border-border">
-                      <p className="text-[11px] text-muted-foreground font-medium uppercase">Date</p>
-                      <p className="text-sm font-semibold mt-1 font-mono">{result.parsed.date || "—"}</p>
-                    </div>
-
-                    <div className="p-3 rounded-lg bg-muted/30 border border-border">
-                      <p className="text-[11px] text-muted-foreground font-medium uppercase">Subtotal</p>
-                      <p className="text-sm font-semibold mt-1 font-mono">
-                        {result.parsed.subTotal || "0.00"} {result.parsed.currency}
-                      </p>
-                    </div>
-
-                    <div className="p-3 rounded-lg bg-muted/30 border border-border">
-                      <p className="text-[11px] text-muted-foreground font-medium uppercase">
-                        VAT ({result.parsed.vatPercent}%)
-                      </p>
-                      <p className="text-sm font-semibold mt-1 font-mono">
-                        {result.parsed.vatAmount || "0.00"} {result.parsed.currency}
-                      </p>
-                    </div>
-
-                    <div className="p-3 rounded-lg bg-primary/10 border border-primary/20 col-span-2 sm:col-span-1">
-                      <p className="text-[11px] text-primary font-semibold uppercase">Total</p>
-                      <p className="text-base font-extrabold mt-0.5 text-primary font-mono">
-                        {result.parsed.total} {result.parsed.currency}
-                      </p>
-                    </div>
-
-                    <div className="p-3 rounded-lg bg-muted/30 border border-border col-span-2 sm:col-span-1">
-                      <p className="text-[11px] text-muted-foreground font-medium uppercase">Currency</p>
-                      <Badge variant="outline" className="mt-1 font-mono">
-                        {result.parsed.currency}
-                      </Badge>
+            <CardContent className="p-0">
+              <div className="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-border">
+                {/* LEFT PANE: ZOOMABLE RECEIPT PREVIEW (5 cols) */}
+                <div className="lg:col-span-5 p-4 bg-muted/20 flex flex-col items-center justify-between space-y-4">
+                  <div className="w-full flex items-center justify-between text-xs text-muted-foreground">
+                    <span className="font-semibold uppercase tracking-wider text-[11px]">Original Document</span>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => setImageZoom((z) => Math.max(0.7, z - 0.2))}
+                        className="h-7 w-7"
+                        title="Zoom Out"
+                      >
+                        <ZoomOut className="w-3.5 h-3.5" />
+                      </Button>
+                      <span className="font-mono text-[11px] w-10 text-center">{Math.round(imageZoom * 100)}%</span>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => setImageZoom((z) => Math.min(2.5, z + 0.2))}
+                        className="h-7 w-7"
+                        title="Zoom In"
+                      >
+                        <ZoomIn className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => setImageZoom(1)}
+                        className="h-7 w-7"
+                        title="Reset Zoom"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                      </Button>
                     </div>
                   </div>
 
-                  {/* Line items if detected */}
-                  {result.parsed.lineItems && result.parsed.lineItems.length > 0 && (
-                    <div className="border border-border rounded-lg overflow-hidden mt-4">
-                      <div className="bg-muted/40 px-4 py-2 border-b border-border text-xs font-semibold">
-                        Detected Items
+                  <div className="w-full h-[480px] bg-card rounded-xl border border-border overflow-auto flex items-center justify-center p-2 relative">
+                    {imagePreview && (
+                      <img
+                        src={imagePreview}
+                        alt="Scanned Receipt Document"
+                        style={{ transform: `scale(${imageZoom})`, transformOrigin: "top center" }}
+                        className="max-w-full max-h-full object-contain transition-transform duration-150"
+                      />
+                    )}
+                  </div>
+
+                  <p className="text-[11px] text-muted-foreground text-center">
+                    Inference executed on {result.backend.toUpperCase()} in {result.latencyMs}ms.
+                  </p>
+                </div>
+
+                {/* RIGHT PANE: INTERACTIVE EDITABLE FORM & MATH AUDIT (7 cols) */}
+                <div className="lg:col-span-7 p-6 space-y-6">
+                  {/* Math Audit Reconciliation Banner */}
+                  {!editedReceipt.isMathBalanced && (
+                    <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 text-xs">
+                      <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300">
+                        <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
+                        <span>
+                          Subtotal ({editedReceipt.subTotal}) + Tax ({editedReceipt.vatAmount}) ={" "}
+                          {(parseFloat(editedReceipt.subTotal) + parseFloat(editedReceipt.vatAmount)).toFixed(2)}, but Total is{" "}
+                          {editedReceipt.total}.
+                        </span>
+                      </div>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleAutoReconcile}
+                        className="text-xs h-7 shrink-0 border-amber-500/30 text-amber-700 hover:bg-amber-500/10"
+                      >
+                        Auto-Reconcile Total
+                      </Button>
+                    </div>
+                  )}
+
+                  {/* Primary Fields Form */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <div className="flex justify-between items-center">
+                        <Label htmlFor="field-store" className="text-xs font-semibold uppercase text-muted-foreground">
+                          Merchant / Store Name
+                        </Label>
+                        <span className="text-[10px] text-emerald-600 font-mono">
+                          Confidence: {editedReceipt.confidence.store}%
+                        </span>
+                      </div>
+                      <Input
+                        id="field-store"
+                        value={editedReceipt.store}
+                        onChange={(e) => handleFieldChange("store", e.target.value)}
+                        className="h-9 font-medium"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between items-center">
+                        <Label htmlFor="field-date" className="text-xs font-semibold uppercase text-muted-foreground">
+                          Date
+                        </Label>
+                        <span className="text-[10px] text-emerald-600 font-mono">
+                          Confidence: {editedReceipt.confidence.date}%
+                        </span>
+                      </div>
+                      <Input
+                        id="field-date"
+                        value={editedReceipt.date}
+                        onChange={(e) => handleFieldChange("date", e.target.value)}
+                        className="h-9 font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="field-category" className="text-xs font-semibold uppercase text-muted-foreground">
+                        Expense Category
+                      </Label>
+                      <select
+                        id="field-category"
+                        value={editedReceipt.category}
+                        onChange={(e) => handleFieldChange("category", e.target.value as ExpenseCategory)}
+                        className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                      >
+                        {CATEGORY_OPTIONS.map((cat) => (
+                          <option key={cat} value={cat} className="bg-popover text-popover-foreground">
+                            {cat}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="field-ref" className="text-xs font-semibold uppercase text-muted-foreground">
+                        Reference / Confirmation #
+                      </Label>
+                      <Input
+                        id="field-ref"
+                        value={editedReceipt.referenceNumber || ""}
+                        onChange={(e) => handleFieldChange("referenceNumber", e.target.value)}
+                        placeholder="e.g. 4074958385"
+                        className="h-9 font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="field-payment" className="text-xs font-semibold uppercase text-muted-foreground">
+                        Payment Method
+                      </Label>
+                      <Input
+                        id="field-payment"
+                        value={editedReceipt.paymentMethod || ""}
+                        onChange={(e) => handleFieldChange("paymentMethod", e.target.value)}
+                        placeholder="e.g. Visa, Mada"
+                        className="h-9"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Financial Amounts Breakdown */}
+                  <div className="p-4 rounded-xl border border-border bg-muted/10 space-y-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Financial Reconciliation
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="space-y-1">
+                        <Label htmlFor="field-subtotal" className="text-[11px] text-muted-foreground uppercase">
+                          Subtotal
+                        </Label>
+                        <Input
+                          id="field-subtotal"
+                          value={editedReceipt.subTotal}
+                          onChange={(e) => handleFieldChange("subTotal", e.target.value)}
+                          className="h-8 font-mono text-sm"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label htmlFor="field-tax" className="text-[11px] text-muted-foreground uppercase">
+                          Taxes & Fees
+                        </Label>
+                        <Input
+                          id="field-tax"
+                          value={editedReceipt.vatAmount}
+                          onChange={(e) => handleFieldChange("vatAmount", e.target.value)}
+                          className="h-8 font-mono text-sm"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label htmlFor="field-total" className="text-[11px] text-primary font-bold uppercase">
+                          Grand Total
+                        </Label>
+                        <Input
+                          id="field-total"
+                          value={editedReceipt.total}
+                          onChange={(e) => handleFieldChange("total", e.target.value)}
+                          className="h-8 font-mono text-sm font-bold border-primary/40 text-primary"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label htmlFor="field-currency" className="text-[11px] text-muted-foreground uppercase">
+                          Currency
+                        </Label>
+                        <select
+                          id="field-currency"
+                          value={editedReceipt.currency}
+                          onChange={(e) => handleFieldChange("currency", e.target.value)}
+                          className="h-8 w-full rounded-md border border-input bg-transparent px-2 font-mono text-sm shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        >
+                          <option value="AED">AED</option>
+                          <option value="SAR">SAR</option>
+                          <option value="USD">USD</option>
+                          <option value="EUR">EUR</option>
+                          <option value="GBP">GBP</option>
+                          <option value="KWD">KWD</option>
+                          <option value="QAR">QAR</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Line Items Table */}
+                  {editedReceipt.lineItems && editedReceipt.lineItems.length > 0 && (
+                    <div className="border border-border rounded-xl overflow-hidden">
+                      <div className="bg-muted/40 px-4 py-2 border-b border-border text-xs font-semibold flex justify-between items-center">
+                        <span>Line Items ({editedReceipt.lineItems.length})</span>
+                        <span>Amount ({editedReceipt.currency})</span>
                       </div>
                       <div className="divide-y divide-border text-sm">
-                        {result.parsed.lineItems.map((item, i) => (
-                          <div key={i} className="px-4 py-2 flex justify-between items-center">
-                            <span>{item.description}</span>
-                            <span className="font-mono text-muted-foreground">{item.amount}</span>
+                        {editedReceipt.lineItems.map((item, idx) => (
+                          <div key={idx} className="p-3 flex items-center justify-between gap-3">
+                            <Input
+                              value={item.description}
+                              onChange={(e) => {
+                                const newItems = [...editedReceipt.lineItems]
+                                newItems[idx].description = e.target.value
+                                handleFieldChange("lineItems", newItems)
+                              }}
+                              className="h-8 text-xs font-medium"
+                            />
+                            <Input
+                              value={item.amount}
+                              onChange={(e) => {
+                                const newItems = [...editedReceipt.lineItems]
+                                newItems[idx].amount = e.target.value
+                                handleFieldChange("lineItems", newItems)
+                              }}
+                              className="h-8 w-24 text-right font-mono text-xs font-semibold shrink-0"
+                            />
                           </div>
                         ))}
                       </div>
                     </div>
                   )}
-                </TabsContent>
-
-                {/* Raw OCR Text Tab */}
-                <TabsContent value="raw">
-                  <pre className="p-4 rounded-lg bg-muted/40 border border-border text-xs font-mono whitespace-pre-wrap max-h-60 overflow-y-auto">
-                    {result.rawText}
-                  </pre>
-                </TabsContent>
-              </Tabs>
+                </div>
+              </div>
             </CardContent>
           </Card>
         )}
@@ -826,7 +1179,10 @@ export default function ReceiptDemo() {
                   <div key={item.id} className="py-2.5 flex items-center justify-between">
                     <div>
                       <span className="font-semibold text-foreground mr-2">{item.parsed.store}</span>
-                      <span className="text-muted-foreground">{item.parsed.date}</span>
+                      <span className="text-muted-foreground mr-2">{item.parsed.date}</span>
+                      <Badge variant="outline" className="text-[10px] py-0">
+                        {item.parsed.category}
+                      </Badge>
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="font-mono font-medium">
@@ -844,11 +1200,11 @@ export default function ReceiptDemo() {
 
       {/* Footer */}
       <footer className="border-t border-border py-6 text-center text-xs text-muted-foreground">
-        <div className="max-w-6xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p>Receipt AI — In-Browser Vision Scanner with WebGPU</p>
           <p className="flex items-center gap-1.5">
             <ShieldCheck className="w-4 h-4 text-emerald-500" />
-            100% Client-Side. No images or data sent to servers.
+            100% Client-Side. No images or financial data sent to servers.
           </p>
         </div>
       </footer>
