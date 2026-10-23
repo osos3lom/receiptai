@@ -1,6 +1,7 @@
 import React from "react"
 import Link from "next/link"
 import Image from "next/image"
+import { getAssetPath } from "@/lib/utils"
 import {
   Sparkles,
   Zap,
@@ -28,7 +29,7 @@ export default function HomePage() {
         <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5 group">
             <Image
-              src="/icon.svg"
+              src={getAssetPath("/icon.svg")}
               alt="Receipt AI Logo"
               width={32}
               height={32}
@@ -84,7 +85,7 @@ export default function HomePage() {
               <div className="relative group cursor-default">
                 <div className="absolute -inset-2 rounded-3xl bg-gradient-to-tr from-primary/30 via-emerald-500/20 to-sky-400/30 blur-xl opacity-70 group-hover:opacity-100 transition-opacity duration-500"></div>
                 <Image
-                  src="/icon.svg"
+                  src={getAssetPath("/icon.svg")}
                   alt="Receipt AI Icon"
                   width={80}
                   height={80}
@@ -197,7 +198,7 @@ export default function HomePage() {
                 <div>
                   <div className="relative aspect-[16/10] overflow-hidden bg-slate-950">
                     <Image
-                      src="/brand-scanner-webgpu.jpg"
+                      src={getAssetPath("/brand-scanner-webgpu.jpg")}
                       alt="WebGPU On-Device AI Scanner"
                       width={640}
                       height={400}
@@ -231,7 +232,7 @@ export default function HomePage() {
                 <div>
                   <div className="relative aspect-[16/10] overflow-hidden bg-slate-950">
                     <Image
-                      src="/brand-zatca-verification.jpg"
+                      src={getAssetPath("/brand-zatca-verification.jpg")}
                       alt="ZATCA Compliance Verification"
                       width={640}
                       height={400}
@@ -265,7 +266,7 @@ export default function HomePage() {
                 <div>
                   <div className="relative aspect-[16/10] overflow-hidden bg-slate-950">
                     <Image
-                      src="/brand-erp-integration.jpg"
+                      src={getAssetPath("/brand-erp-integration.jpg")}
                       alt="ERP Accounting Automation"
                       width={640}
                       height={400}

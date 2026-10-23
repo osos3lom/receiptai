@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react"
 import Link from "next/link"
 import Image from "next/image"
+import { getAssetPath } from "@/lib/utils"
 import {
   Calendar,
   Clock,
@@ -368,7 +369,7 @@ export default function ArticleReader({
         {/* Hero Image */}
         <div className="relative aspect-[16/10] sm:aspect-[21/9] rounded-2xl overflow-hidden border border-border/80 shadow-xs bg-muted">
           <Image
-            src={article.image}
+            src={getAssetPath(article.image)}
             alt={title}
             fill
             priority

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import Image from "next/image"
+import { getAssetPath } from "@/lib/utils"
 import {
   Download,
   Upload,
@@ -537,7 +538,7 @@ export default function ReceiptDemo() {
               <span className="hidden xs:inline">{lang === "ar" ? "الرئيسية" : "Home"}</span>
             </Link>
             <Image
-              src="/icon.svg"
+              src={getAssetPath("/icon.svg")}
               alt="Receipt AI Logo"
               width={40}
               height={40}

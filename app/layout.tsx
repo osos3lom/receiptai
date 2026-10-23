@@ -18,6 +18,8 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 })
 
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH || ""
+
 export const metadata: Metadata = {
   metadataBase: new URL("https://osos3lom.github.io/receiptai"),
   title: "قارئ الفواتير الذكي — Receipt AI | محلي وفوري بخصوصية تامة",
@@ -81,10 +83,10 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/icon.svg", type: "image/svg+xml" },
-      { url: "/app-icon.jpg" },
+      { url: `${basePath}/icon.svg`, type: "image/svg+xml" },
+      { url: `${basePath}/app-icon.jpg` },
     ],
-    apple: "/apple-icon.png",
+    apple: `${basePath}/apple-icon.png`,
   },
   appleWebApp: {
     capable: true,

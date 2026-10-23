@@ -2,6 +2,7 @@ import React from "react"
 import Link from "next/link"
 import Image from "next/image"
 import type { Metadata } from "next"
+import { getAssetPath } from "@/lib/utils"
 import {
   Sparkles,
   ArrowRight,
@@ -107,7 +108,7 @@ export default function ArticlesPage() {
               <div>
                 <div className="relative aspect-[16/10] overflow-hidden bg-muted">
                   <Image
-                    src={article.image}
+                    src={getAssetPath(article.image)}
                     alt={article.title.ar}
                     width={600}
                     height={375}
