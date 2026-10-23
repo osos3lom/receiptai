@@ -33,6 +33,7 @@ import {
   Eye,
   Maximize2,
   X,
+  ExternalLink,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -540,6 +541,18 @@ export default function ReceiptDemo() {
                 <Trash2 className="w-3.5 h-3.5" />
               </Button>
             )}
+
+            {/* Business Inquiries Header Link */}
+            <a
+              href="https://www.osamamaalam.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden md:inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-lg border border-border/40 hover:bg-secondary/60"
+              title={lang === "ar" ? "استفسارات تجارية" : "Business Inquiries"}
+            >
+              <span>{lang === "ar" ? "استفسارات تجارية" : "Inquiries"}</span>
+              <ExternalLink className="w-2.5 h-2.5 opacity-70" />
+            </a>
           </div>
         </div>
       </header>
@@ -1247,12 +1260,28 @@ export default function ReceiptDemo() {
         </div>
       )}
 
-      {/* Minimal Footer */}
-      <footer className="border-t border-border py-4 text-center text-xs text-muted-foreground">
-        <div className="max-w-5xl mx-auto px-4 flex items-center justify-center gap-1.5 font-medium">
-          <ShieldCheck className="w-3.5 h-3.5 text-success" />
-          <span>{t.privacyBadge}</span>
-          <InfoTip content={t.privacyTip} />
+      {/* Footer with Creator Attribution & Business Inquiries */}
+      <footer className="border-t border-border py-5 text-center text-xs text-muted-foreground bg-card/30">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-1.5 font-medium">
+            <ShieldCheck className="w-3.5 h-3.5 text-success shrink-0" />
+            <span>{t.privacyBadge}</span>
+            <InfoTip content={t.privacyTip} />
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-2 text-xs">
+            <span>{lang === "ar" ? "طُوّر هذا العرض التجريبي بواسطة أسامه عالم" : "Demo created by Osama Alam"}</span>
+            <span className="text-border/80 hidden sm:inline">•</span>
+            <a
+              href="https://www.osamamaalam.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-foreground hover:text-primary transition-colors underline underline-offset-4 decoration-border hover:decoration-primary inline-flex items-center gap-1"
+            >
+              <span>{lang === "ar" ? "للاستفسارات والمشاريع التجارية" : "Business Inquiries"}</span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
         </div>
       </footer>
     </div>

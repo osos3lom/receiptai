@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://osos3lom.github.io/receiptai/sitemap.xml
