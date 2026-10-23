@@ -1,7 +1,22 @@
 import type React from "react"
 import type { Metadata, Viewport } from "next"
+import { IBM_Plex_Sans_Arabic, JetBrains_Mono } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
+import WhatsAppFloatingCTA from "@/components/whatsapp-floating-cta"
 import "./globals.css"
+
+const ibmPlexSansArabic = IBM_Plex_Sans_Arabic({
+  subsets: ["arabic", "latin"],
+  weight: ["300", "400", "500", "600", "700"],
+  variable: "--font-sans-custom",
+  display: "swap",
+})
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono-custom",
+  display: "swap",
+})
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://osos3lom.github.io/receiptai"),
@@ -76,13 +91,17 @@ export const metadata: Metadata = {
     statusBarStyle: "default",
     title: "Receipt AI",
   },
+  verification: {
+    google: "5cbd7db8e76d5f54",
+  },
 }
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
   viewportFit: "cover",
-  maximumScale: 5,
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#F5F5F7" },
     { media: "(prefers-color-scheme: dark)", color: "#000000" },
@@ -97,7 +116,10 @@ const jsonLd = {
   url: "https://osos3lom.github.io/receiptai/",
   description: "استخراج بيانات الفواتير والمستندات الضريبية ومطابقتها محلياً بخصوصية تامة داخل المتصفح بتقنية WebGPU والذكاء الاصطناعي.",
   applicationCategory: "BusinessApplication",
-  operatingSystem: "All modern browsers",
+  operatingSystem: "All modern browsers (Chrome 113+, Safari 18+, Edge 113+)",
+  softwareVersion: "2.1",
+  inLanguage: ["ar", "en"],
+  screenshot: "https://osos3lom.github.io/receiptai/app-icon.jpg",
   offers: {
     "@type": "Offer",
     price: "0",
@@ -130,9 +152,10 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       </head>
-      <body className="font-sans antialiased min-h-screen selection:bg-primary/20 pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
+      <body className={`${ibmPlexSansArabic.variable} ${jetbrainsMono.variable} font-sans antialiased min-h-screen w-full max-w-full overflow-x-clip selection:bg-primary/20 pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]`}>
         {children}
-        <Analytics />
+        <WhatsAppFloatingCTA />
+        {process.env.NEXT_PUBLIC_VERCEL_ENV && <Analytics />}
       </body>
     </html>
   )
