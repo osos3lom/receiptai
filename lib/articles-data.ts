@@ -457,12 +457,12 @@ For an invoice artifact totaling **264.50 SAR**, the pipeline constructs an idem
   {
     slug: "decision-models-jev-laya-ai-receipt-automation",
     title: {
-      ar: "من قواعد Jev إلى سير عمل Laya AI في مستودع Receipt AI: معمارية نماذج اتخاذ القرار في فرز وتدقيق الفواتير",
-      en: "From Jev Rules to the Laya AI Pipeline in Receipt AI: Non-Autoregressive Decision Models for Fiscal Triage",
+      ar: "من معمارية Jev إلى خط أنابيب Laya AI في مستودع Receipt AI — هندسة نماذج اتخاذ القرار لفرز الفواتير وتدقيق الامتثال",
+      en: "From Jev Architecture to the Repository Laya AI Pipeline — Non-Autoregressive Decision Engineering for Fiscal Triage",
     },
     description: {
-      ar: "تحليل معماري لكيفية توظيف نماذج اتخاذ القرار (System 1) بدلاً من النماذج التوليدية، واستعراض تفصيلي لخط أنابيب Laya AI المعتمد في هذا المستودع لتصنيف المستندات والتحقق من اشتراطات زاتكا.",
-      en: "A comprehensive systems analysis of non-autoregressive decision models versus generative LLMs, detailing the exact Laya AI triage and classification workflow implemented inside this repository.",
+      ar: "تحليل معماري مقارن يفحص أوجه القصور الهيكلية في النماذج التوليدية مقابل نماذج اتخاذ القرار، مع توثيق شامل لخط أنابيب Laya AI المعتمد في هذا المستودع لتصنيف المستندات والتحقق من اشتراطات زاتكا",
+      en: "A comparative systems analysis contrasting generative autoregressive models with non-autoregressive decision models, detailing the exact production Laya AI triage workflow implemented inside this repository",
     },
     image: "/brand-decision-models-laya.jpg",
     date: "2026-10-23",
@@ -489,93 +489,78 @@ For an invoice artifact totaling **264.50 SAR**, the pipeline constructs an idem
     ],
     content: {
       ar: `
-### حدود النماذج التوليدية (LLMs) في مسارات التدقيق والفرز المالي
+### القصور الهيكلي للنماذج التوليدية في مسارات المعالجة المحاسبية
 
-تعتمد معظم تطبيقات استخراج الفواتير التقليدية على النماذج اللغوية التوليدية (Autoregressive LLMs). ورغم مرونة هذه النماذج في المحادثات العامة، إلا أن استخدامها في معالجة المستندات المحاسبية يفرض قيوداً معمارية مكلفة؛ فالنماذج التوليدية تولد النصوص كلمة إثر أخرى بصفتها أدوات تفكير بطيئة **(System 2)**، مما يؤدي إلى:
-* **الهلوسة الهيكلية وفقدان المطابقة (Schema Drift):** ميل النماذج التوليدية إلى توليد حقول غير مطلوبة أو تغيير بنية الـ JSON بشكل مفاجئ يعطل خطوط المعالجة الآلية.
-* **غياب المعايرة الإحصائية الحقيقية (Uncalibrated Confidence):** عجز طبقة التوليد عن تقديم احتمالية رياضية تعكس درجة الثقة الدقيقة في التصنيف، مما يصعّب بناء سياسات فرز حاسمة لعزل الفواتير التي تحتاج مراجعة بشرية.
-* **الزمن والتكلفة المرتفعة:** استهلاك وقت يتراوح بين **1500ms إلى 4000ms** لكل عملية استدلال، مع فرض تكلفة متصاعدة لكل رمز (Token)، مما يجعل فرز مئات الآلاف من الفواتير غير مجدٍ اقتصادياً.
+تبنت المنظومات المحاسبية الحديثة النماذج اللغوية التوليدية الضخمة لأتمتة فرز المستندات وتوجيه قيود اليومية. غير أن القياسات الميدانية تكشف عن تعارض معماري جوهري بين طبيعة المستندات المالية وآلية الاستدلال التوليدي المتعاقب؛ حيث تعمل تلك النماذج عبر استرجاع الرموز المتسلسلة وفق نمط التفكير البطيء، مما يفرز عقبات تشغيلية بالغة الحرج تؤثر سلباً على موثوقية الأنظمة المؤسسية.
 
----
+1. **انحراف المخططات والتشوه البنيوي (Structural Schema Drift)**
+   تتعرض مخرجات النماذج التوليدية لتشوهات مفاجئة في مفاتيح الكائنات البرمجية حتى عند تفعيل أنماط الإخراج المنظم، مما يؤدي إلى انهيار مسارات التكامل الآلي مع قواعد بيانات الـ ERP واضطرار الأنظمة لإعادة المحاولة الحسابية المتكررة.
 
-### الانتقال من Jev إلى عائلة Laya AI مفتوحة المصدر
+2. **انعدام المعايرة الاحتمالية (Uncalibrated Uncertainty)**
+   تعجز طبقات الاستدلال التوليدي عن تقديم احتمالات رياضية حقيقية تعكس ثقة النموذج في قراره، مما يحرم مهندسي النظم من إرساء عتبات ثقة قطعية لعزل المعاملات غير المكتملة وتوجيهها للمراجعة المستندية المباشرة.
 
-لإنهاء هذا الهدر المعماري، ظهرت فئة **نماذج اتخاذ القرار (Decision Models / System 1)**. هذه النماذج غير توليدية؛ حيث تستقبل النص المستخرج كحالة سياقية (\`State\`) وقائمة باستعلامات منمطة (\`Typed Questions\`)، وتُرجع مخرجات قطعية محكومة بمحددات رياضية واحتمالات معايرة دقيقة في تمريرة عصبية متزامنة واحدة.
-
-1. **مرحلة Jev (من تطوير TypeSafe AI):**
-   قدمت أداة **Jev** أول نموذج قرار سحابي أثبت قدرة معالجات System 1 على تصنيف المستندات وتوجيه الوكلاء عبر محددات قياسية:
-   - **\`choice\`:** اختيار قطعي بين فئات محددة مع توزيع احتمالي كامل.
-   - **\`noul\`:** تقييم صدق فرضية ثنائية وإرجاع احتمالية $P(\\text{true})$.
-   - **\`score\`:** احتساب درجة رتبية للجودة والتطابق.
-   
-   ورغم قوة Jev، إلا أن اعتمادها على واجهة سحابية مغلقة (Cloud API) ومفاتيح وصول مدفوعة حال دون تشغيلها محلياً في بيئات معزولة شبكياً.
-
-2. **التطور إلى Laya AI (من تطوير Convai Innovations):**
-   أطلقت Convai Innovations عائلة **Laya** كنموذج مفتوح المصدر والأوزان (Apache 2.0) مبني على معمارية مشفر متقدم (**ModernBERT-large**) ومدرّب بتقنية **RLCD** (التعلم المعزز بمحددات المعايرة الصارمة). تتيح Laya إمكانية التشغيل المحلي الكامل دون الحاجة إلى خوادم سحابية، بزمن استجابة فائق يقل عن **40ms** وبكفاءة لغوية متعددة تدعم العربية والإنجليزية بامتياز.
+3. **اختناقات زمن الاستجابة والتكلفة الحدية (Latency and Metered Surcharges)**
+   يتراوح زمن المعالجة التوليدية عبر السحاب بين 1500ms و 4000ms لكل صفحة، مقترناً برسوم متصاعدة لكل رمز، وهو ما ينسف الجدوى الاقتصادية عند معالجة عشرات الآلاف من الفواتير الورقية والإلكترونية شهرياً.
 
 ---
 
-### سير عمل Laya AI المعتمد داخل مستودع Receipt AI
+### مسار التطور التقني من منظومة Jev إلى أوزان Laya AI المستقلة
 
-في هذا المستودع، تم بناء خط أنابيب متكامل لفرز وتدقيق الفواتير يجمع بين استخراج النصوص عبر الرؤية الحاسوبية ونظام الفرز الذكي عبر نموذج **Laya AI** (\`convaiinnovations/laya-multilingual\`):
+استجابة لتلك المعضلات، برزت فئة هندسية متخصصة تُعرف بنماذج اتخاذ القرار، وهي معالجات عصبية غير توليدية تتجاهل صياغة السرد اللغوي وتركز طاقتها الحوسبية على تقييم حالة النظام واستخراج قرارات منمطة مدعومة باحتمالات إحصائية صادقة في تمريرة مصفوفية متزامنة واحدة.
 
-\`\`\`mermaid
-flowchart TD
-    A["المستند المحاسبي الممسوح"] --> B["محرك الرؤية الطرفي (WebGPU Vision)"]
-    B --> C["النص الخام المستخرج (Raw OCR Buffer)"]
-    C --> D["مشغل الفرز LayaReceiptTriage"]
-    
-    subgraph LayaSchema ["مخطط قرارات Laya (RECEIPT_DECISION_SCHEMA)"]
-        D --> E["doc_category (Choice)"]
-        D --> F["is_zatca_compliant (Noul)"]
-        D --> G["needs_review (Noul)"]
-    end
-    
-    E --> H["تصنيف نوع الوثيقة (Saudi ZATCA / POS / SaaS / Non-Receipt)"]
-    F --> I["احتمالية الامتثال لاشتراطات زاتكا P(ZATCA >= 0.90)"]
-    G --> J["تحديد الحاجة للتدقيق البشري (Review Flag)"]
-    
-    H & I & J --> K["توجيه البيانات: الترحيل إلى ERP أو إدراجها في بيانات التدريب"]
-\`\`\`
+1. **المرحلة التأسيسية عبر منصة Jev**
+   أثبتت منصة Jev المطورة من قبل TypeSafe AI جدوى معمارية القرار السريع في أتمتة البرمجيات وتوجيه التدفقات المنطقية، عبر تقديم ثلاث بدائيات تقييم قياسية تتمثل في الاختيار متعدد الفئات، والتحقق المنطقي الثنائي، والتقييم المتصل للدرجات. ومع ذلك، ظلت طبيعتها السحابية المغلقة قيداً رئيسياً يحول دون العمل في البيئات المعزولة ويفرض مخاطر خروج البيانات المالية الحساسة خارج النطاق المؤسسي.
 
-يتكون سير العمل في كود المستودع (\`data-pipeline/laya_workflow.py\`) من ركائز محددة بدقة:
-
-1. **مخطط القرارات المنمط (\`RECEIPT_DECISION_SCHEMA\`):**
-   يُرسل النص المستخرج إلى مشغل \`laya.Router()\` لتقييم ثلاثة استعلامات حاسمة:
-   * **نوع المستند (\`doc_category\`):** تصنيف منمط عبر خيار (\`choice\`) يفصل بدقة بين:
-     - فاتورة ضريبية معتمدة لهيئة زاتكا (\`Saudi ZATCA Tax Invoice\`).
-     - إيصال نقاط بيع حراري للمطاعم والمتاجر (\`Point of Sale Thermal Receipt\`).
-     - فاتورة اشتراك سحابي رقمي (\`Digital SaaS or Cloud Subscription\`).
-     - مستند تالف أو غير محاسبي (\`Non-Receipt or Unreadable Scan\`).
-   * **الامتثال لمتطلبات الفوترة الإلكترونية (\`is_zatca_compliant\`):** عبر استعلام منطقي (\`noul\`) يفحص توافر ضريبة الـ 15%، الرقم الضريبي المكون من 15 خانة، ورمز الاستجابة السريعة المشفر.
-   * **فرز حالات المراجعة البشرية (\`needs_review\`):** عبر استعلام منطقي (\`noul\`) يحدد ما إذا كان المستند يفتقر إلى المجموع الكلي أو يحتوي على تباينات رقمية تستدعي المراجعة اليدوية.
-
-2. **التكامل المزدوج: خط بيانات التدريب ومحرك المتصفح:**
-   - **في خط الأنابيب (\`data-pipeline\`):** يُستخدم سير عمل Laya كطبقة ضبط جودة (Quality Control) لفلترة الفواتير الاصطناعية والحقيقية قبل إدراجها في ملف التدريب (\`train_manifest.jsonl\`) لتدريب النماذج البصرية المصغرة (\`SmolVLM-256M\` / \`Florence-2-base\`).
-   - **على طرفية العميل (Client-Side Edge):** يُدمج نموذج Laya كحزمة ONNX خفيفة لتقييم النصوص المستخرجة محلياً في المتصفح بزمن استجابة شبه فوري ودون تسريب أي بايت خارج جهاز المستخدم.
+2. **التحول النوعي عبر منظومة Laya AI مفتوحة المصدر**
+   قدمت شركة Convai Innovations عائلة Laya بترخيص أباتشي المفتوح، مرسيةً الأساس لنماذج قرار محلية تعتمد على مشفر متعدد اللغات فائق الكفاءة. خضعت Laya لتدريب معزز محكوم بمحددات المعايرة الرياضية الصارمة وفق مقياس براير وخسارة السجل، مما يضمن دقة التوزيع الاحتمالي. وتتميز الأوزان بخفة استثنائية تسمح بتشغيلها محلياً عبر محركات ONNX و WebGPU بزمن انتقال لا يتجاوز 40ms وبصفر تكلفة سحابية.
 
 ---
 
-### المقارنة المعمارية: النماذج التوليدية مقابل سير عمل Jev و Laya في المستودع
+### مصفوفة المقارنة المعمارية بين النماذج التوليدية ومنصات اتخاذ القرار
 
-| الخاصية المعمارية | النماذج التوليدية (GPT-4o / Claude) | مسار قواعد Jev (TypeSafe API) | سير عمل Laya AI في مستودعنا |
+| الخاصية المعمارية | النماذج التوليدية العامة | مسار قواعد Jev السحابي | سير عمل Laya AI في هذا المستودع |
 | :--- | :--- | :--- | :--- |
 | **نمط المعالجة** | توليد تسلسلي متعاقب للرموز | استدعاء سحابي لتمريرة قرار واحدة | **تمريرة محلية متزامنة عبر مشفر Laya** |
 | **محيط سرية البيانات** | إرسال البيانات لخوادم خارجية | إرسال البيانات لخوادم TypeSafe AI | **معالجة محلية بالكامل داخل بيئة العمل** |
-| **زمن استجابة الفرز** | 1500ms – 4000ms | 300ms – 600ms (بسبب الشبكة) | **أقل من 40ms محلياً** |
+| **زمن استجابة الفرز** | 1500ms – 4000ms | 300ms – 600ms بسبب زمن الشبكة | **أقل من 40ms محلياً** |
 | **استقرار المخرجات** | عرضة لتغير بنية الحقول | مخرجات منمطة محكومة بقواعد Jev | **مخرجات منمطة قطعية ومطابقة لمخطط الكود** |
 | **المعايرة الإحصائية** | غير معايرة رياضياً | احتمالات معايرة سحابياً | **معايرة دقيقة وفق خوارزمية RLCD** |
 | **تكلفة التشغيل** | تكلفة تراكمية لكل رمز | رسوم اشتراك سحابية بالاستدعاء | **مجاني بالكامل وبصفر تكلفة بنية تحتية** |
 
 ---
 
-### نموذج استدعاء ومخرجات Laya في الكود الفعلي
+### المعمارية التشغيلية لخط أنابيب Laya AI داخل مستودع Receipt AI
 
-يوضح الكود التالي البنية الفعلية للمدخلات والمخرجات كما يتم تنفيذها داخل فئة \`LayaReceiptTriage\`:
+يوظف المستودع نموذج Laya متعدد اللغات في خط أنابيب هجين يربط بين مرحلة استخراج النصوص البصرية الطرفية ونظام الفرز المنطقي المؤتمت عبر فئة LayaReceiptTriage المعرفة في مسار بيانات التدريب.
+
+\`\`\`mermaid
+flowchart TD
+    A["المستند المحاسبي الممسوح"] --> B["محرك الرؤية الطرفي WebGPU Vision"]
+    B --> C["مخزن النصوص الخام المستخرجة"]
+    C --> D["مشغل الفرز الآلي LayaReceiptTriage"]
+    D --> E["محدد الفئة doc_category لتحديد نوع الوثيقة"]
+    D --> F["محدد الامتثال is_zatca_compliant للتحقق من أختام زاتكا"]
+    D --> G["محدد المراجعة needs_review لعزل المعاملات غير المكتملة"]
+    E --> H["توجيه مباشر لقيود الأستاذ العام أو ملف التدريب"]
+    F --> H
+    G --> H
+\`\`\`
+
+1. **مخطط استعلامات القرار القياسي (RECEIPT_DECISION_SCHEMA)**
+   يخضع النص الخام المستخرج لتقييم متزامن داخل مشغل Laya عبر مصفوفة استعلامات منمطة تضم حقل التصنيف لاختيار نوع الوثيقة بدقة بين الفاتورة الضريبية وإيصال نقاط البيع والاشتراك السحابي والمستند التالف، وحقل الامتثال الضريبي للتحقق من عناصر الفوترة الإلكترونية السعودية بنسبة تفوق 90%، وحقل التدقيق الاستثنائي لفرز الفواتير التي تفتقر للمجاميع أو تعاني من تباين رقمي يستدعي المراجعة الإدارية.
+
+2. **التكامل المزدوج لفرز البيانات والاستدلال الطرفي**
+   يعمل خط الأنابيب كمرشح آلي لضبط الجودة وتطهير العينات الاصطناعية والحقيقية قبل إدراجها في ملف التدريب المعتمد لتأهيل النماذج البصرية المدمجة، كما يعمل بذات الكفاءة داخل متصفح المستخدم عبر حزم التنفيذ الخفيفة لفرز الفواتير فورياً ودون مغادرة جهاز العميل.
+
+---
+
+### المواصفات البرمجية لطلب التقييم وحمولة الاستجابة
+
+يوضح المقطع التالي بنية المدخلات والمخرجات كما يتم تنفيذها داخل فئة LayaReceiptTriage في بيئة التشغيل الفعلي
 
 \`\`\`json
 {
-  "document_text_snippet": "شركة التقنية المتقدمة المحدودة - فاتورة ضريبية مبسطة - الرقم الضريبي: 300123456789003 - الإجمالي: 460.00 ر.س - شامل ضريبة القيمة المضافة 15%",
+  "document_text_snippet": "شركة التقنية المتقدمة المحدودة - فاتورة ضريبية مبسطة - الرقم الضريبي 300123456789003 - الإجمالي 460.00 ر.س - شامل ضريبة القيمة المضافة 15%",
   "evaluated_schema": {
     "doc_category": "choice",
     "is_zatca_compliant": "noul",
@@ -584,7 +569,7 @@ flowchart TD
 }
 \`\`\`
 
-النتيجة المباشرة المعايرة رياضياً:
+تنتج المعالجة الطرفية قرارات محكومة بنسب احتمالية محددة رياضياً خلال أقل من 35 ميلي ثانية
 
 \`\`\`json
 {
@@ -613,96 +598,81 @@ flowchart TD
 \`\`\`
 
 > [!IMPORTANT]
-> يمنح اعتماد سير عمل **Laya AI** داخل مستودع **Receipt AI** حلاً معمارياً متكاملاً يتجاوز عيوب النماذج التوليدية وبوابات Jev السحابية؛ حيث يوفر فرزاً وتدقيقاً ضريبياً محلياً عالي الدقة دون أي تكلفة تشغيلية أو مخاطر لنقل البيانات المالية خارج النطاق الآمن.
+> يمنح اعتماد سير عمل Laya AI داخل مستودع Receipt AI حلاً معمارياً متكاملاً يتجاوز عيوب النماذج التوليدية وبوابات Jev السحابية، حيث يوفر فرزاً وتدقيقاً ضريبياً محلياً عالي الدقة دون أي تكلفة تشغيلية أو مخاطر لنقل البيانات المالية خارج النطاق الآمن
 `,
       en: `
 ### The Architectural Inefficiencies of Generative LLMs in Fiscal Triage
 
-Conventional receipt extraction pipelines frequently rely on general-purpose autoregressive Large Language Models (LLMs). While effective for open-ended conversation, utilizing generative models for fiscal document triage introduces critical systems-level liabilities. LLMs operate as sequential, token-by-token reasoning engines **(System 2)**, resulting in:
-* **Schema Inconsistencies and Hallucinations:** Even in constrained JSON modes, generative LLMs occasionally drift in structure, omit required keys, or generate unsupported types that fail automated downstream ingestion pipelines.
-* **Absence of Calibrated Probabilities:** Generative models lack mathematically calibrated confidence scores, rendering it difficult to establish deterministic policy thresholds for routing exceptions to human accountants.
-* **Prohibitive Latency and Metered Costs:** Processing times range between **1,500ms and 4,000ms** per document, compounded by recurrent per-token cloud charges that undermine operational feasibility at enterprise volume.
+Conventional document ingestion architectures frequently deploy autoregressive Large Language Models to handle fiscal triage and general ledger classification. However, telemetry from production accounting pipelines reveals an irreconcilable structural divergence between the rigorous determinism required by financial systems and the token-by-token mechanics of generative inference. Generative architectures execute sequential probability sampling across autoregressive layers, producing systemic operational liabilities across three core dimensions.
+
+1. **Structural Schema Drift and Key Corruption**
+   Even when governed by strict grammar constraints or JSON decoding parameters, generative backbones occasionally omit mandatory keys, alter payload topology, or return malformed numeric entities, terminating automated enterprise ingestion pipelines and forcing costly transactional rollbacks.
+
+2. **Absence of Statistically Calibrated Probabilities**
+   Autoregressive generation logits do not correlate with objective mathematical confidence. Consequently, systems engineers cannot establish immutable probability thresholds for deterministic exception routing or programmatic human escalation.
+
+3. **Inference Latency Penalties and Metered API Overhead**
+   Round-trip WAN traversal combined with sequential token generation imposes latency profiles ranging from 1500ms to 4000ms per document. Compounded by monotonic per-token billing structures, centralized LLM triage introduces prohibitive unit economics at institutional scale.
 
 ---
 
-### The Evolution: From Jev Rules to Open-Weight Laya AI
+### The Structural Transition from Jev to the Open-Weight Laya AI Paradigm
 
-To overcome these constraints, **Non-Autoregressive Decision Models (System 1)** were introduced. Rather than streaming text, decision models ingest extracted text as an input state (\`State\`) along with a schema of **Typed Questions**, returning deterministic, schema-safe outputs with rigorously calibrated probabilities in a single tensor forward pass.
+To resolve the latency and reliability deficits of generative architectures, systems engineering shifted toward non-autoregressive decision models. Designed exclusively for categorization, validation, and scoring, decision models ingest an application state alongside typed evaluation schemas, producing deterministic outputs accompanied by calibrated confidence distributions within a single forward execution pass.
 
-1. **The Jev Phase (TypeSafe AI):**
-   The introduction of **Jev** demonstrated the immense advantages of decision models over generative LLMs for software classification and agent routing using three standard evaluation primitives:
-   - **\`choice\`:** Multi-class classification returning a complete, calibrated probability distribution across categories.
-   - **\`noul\`:** Propositional boolean validation returning a calibrated $P(\\text{true})$.
-   - **\`score\`:** Continuous ordinal scoring for document quality or compliance alignment.
-   
-   However, Jev was delivered solely as a closed cloud API requiring third-party credentials and internet round-trips, making offline, zero-server architectures impossible.
+1. **The Proprietary Foundation Established by Jev**
+   Pioneered by TypeSafe AI, the hosted Jev engine proved the viability of single-pass decision processing across automated routing workflows. By introducing three structured primitives spanning multi-class categorical choices, boolean truth assessments, and scalar scoring rubrics, Jev demonstrated superior execution velocity over generative models. However, its implementation as a proprietary closed-cloud endpoint preserved network latency and required enterprise financial records to exit private network boundaries.
 
-2. **The Open-Weight Breakthrough: Laya AI (Convai Innovations):**
-   The release of the **Laya** model family under the Apache 2.0 license provided the missing open-weight foundation. Built on an optimized **ModernBERT-large** multilingual backbone and trained using Reinforcement Learning with Calibrated Decisions (RLCD), Laya operates completely offline on local hardware via **ONNX** and **WebGPU/WASM** execution backends with sub-40ms latency and zero data egress.
+2. **The Open-Weight Breakthrough of Laya AI**
+   Convai Innovations transitioned this architectural paradigm into an open-weight reality through the release of the Laya model family under the Apache 2.0 license. Constructed upon an optimized ModernBERT-large multilingual backbone and trained via Reinforcement Learning with Calibrated Decisions against strictly proper scoring rules, Laya delivers mathematically sound probability bounds. Its compact parameter footprint permits execution on local hardware via ONNX Runtime and WebGPU execution providers, reducing inference latency below 40ms without external telemetry.
 
 ---
 
-### The Laya AI Workflow in the Receipt AI Repository
+### Architectural Systems Matrix Contrasting Generative and Decision Models
 
-Inside this repository, a purpose-built pipeline couples local computer vision extraction with the **Laya AI** decision engine (\`convaiinnovations/laya-multilingual\`):
+| System Dimension | Centralized Generative LLMs | Hosted Jev Rule Engine | Repository Laya AI Pipeline |
+| :--- | :--- | :--- | :--- |
+| **Inference Mechanism** | Autoregressive token sequence | Hosted single-pass decision API | **Local single forward-pass via Laya encoder** |
+| **Data Privacy Perimeter** | Multi-tenant cloud ingestion | External hosted cloud infrastructure | **Hardware-isolated local memory with zero egress** |
+| **Triage Latency** | 1500ms – 4000ms | 300ms – 600ms network bound | **Under 40ms local execution** |
+| **Structural Reliability** | Vulnerable to syntax and key errors | Strictly typed per Jev rules schema | **Guaranteed typed output matching repository schema** |
+| **Confidence Scoring** | Uncalibrated generation logits | Cloud-calibrated probability | **RLCD-calibrated strictly proper probabilities** |
+| **Operating Cost** | Recurring cost per token | Metered monthly API billing | **Zero recurring infrastructure cost** |
+
+---
+
+### The Operational Laya AI Ingestion Workflow Inside Receipt AI
+
+The architecture inside this repository links edge computer vision with on-device Laya evaluation through the specialized LayaReceiptTriage pipeline implemented within the data pipeline directory.
 
 \`\`\`mermaid
 flowchart TD
-    A["Scanned Fiscal Artifact"] --> B["Edge Computer Vision (WebGPU Vision)"]
-    B --> C["Extracted Text Buffer (Raw OCR Text)"]
+    A["Scanned Fiscal Artifact"] --> B["Client WebGPU Vision Pipeline"]
+    B --> C["Extracted Text and Token Buffer"]
     C --> D["LayaReceiptTriage Execution Engine"]
-    
-    subgraph LayaSchema ["Laya Decision Schema (RECEIPT_DECISION_SCHEMA)"]
-        D --> E["doc_category (Choice)"]
-        D --> F["is_zatca_compliant (Noul)"]
-        D --> G["needs_review (Noul)"]
-    end
-    
-    E --> H["Document Classification (Saudi ZATCA / POS / SaaS / Non-Receipt)"]
-    F --> I["ZATCA E-Invoicing Compliance Probability: P(ZATCA >= 0.90)"]
-    G --> J["Human Review Escalation Flag: Needs Audit"]
-    
-    H & I & J --> K["Deterministic Routing: ERP Ledger Ingestion or Training Curation"]
+    D --> E["Category Selector doc_category for Document Typing"]
+    D --> F["Compliance Assertion is_zatca_compliant for Tax Stamps"]
+    D --> G["Audit Flag needs_review for Incomplete Data"]
+    E --> H["Deterministic Routing to ERP Ingestion or Training Sets"]
+    F --> H
+    G --> H
 \`\`\`
 
-The production workflow implemented in \`data-pipeline/laya_workflow.py\` centers on two core components:
+1. **Standardized Decision Schema Evaluation (RECEIPT_DECISION_SCHEMA)**
+   Raw OCR character buffers pass into the Laya router to execute parallel evaluation across three designated questions. The document category choice classifies the artifact into a Saudi ZATCA tax invoice, a thermal point-of-sale receipt, a digital software subscription, or an invalid scan. The ZATCA compliance assertion validates statutory e-invoicing invariants including 15% VAT, 15-digit taxpayer identifiers, and cryptographic stamps. The review flag isolates documents exhibiting truncated footers or arithmetic discrepancies for manual accountant review.
 
-1. **Standardized Decision Schema (\`RECEIPT_DECISION_SCHEMA\`):**
-   Extracted receipt text is passed directly into \`laya.Router()\` to evaluate three targeted questions:
-   * **Document Category (\`doc_category\`):** A strict multi-class \`choice\` separating:
-     - \`Saudi ZATCA Tax Invoice\` (15% VAT, 15-digit Taxpayer ID, ZATCA QR elements).
-     - \`Point of Sale Thermal Receipt\` (Standard thermal till receipts from retail and hospitality).
-     - \`Digital SaaS or Cloud Subscription\` (Software licenses, domains, hosting bills).
-     - \`Non-Receipt or Unreadable Scan\` (Non-financial documents or corrupted image artifacts).
-   * **ZATCA Compliance Assessment (\`is_zatca_compliant\`):** A calibrated \`noul\` assertion verifying statutory e-invoicing markers ($P(\\text{Compliant}) \\ge 0.90$).
-   * **Human Audit Escalation (\`needs_review\`):** A \`noul\` condition identifying missing totals, unreadable line items, or arithmetic discrepancies that require accountant intervention.
-
-2. **Dual-Environment Deployment:**
-   - **In the Data Pipeline (\`data-pipeline\`):** The Laya workflow operates as an automated Quality Control (QC) harness, auditing synthetic and real receipt samples before compiling them into the training manifest (\`train_manifest.jsonl\`) used to fine-tune compact on-device vision models (\`SmolVLM-256M\` / \`Florence-2-base\`).
-   - **On the Client-Side Edge:** The model runs via lightweight ONNX execution providers directly inside the user's browser, triaging extracted receipts instantaneously without sending data to external cloud services.
+2. **Dual-Stage Operational Deployment**
+   Within the offline dataset synthesis pipeline, the workflow acts as an automated validation harness, purging defective synthetic receipts before indexing vetted pairs into the training manifest to fine-tune compact on-device vision models. Within the client-side WebGPU scanner, the compiled ONNX decision module executes locally in the browser, providing instant document triage without remote network dependencies.
 
 ---
 
-### Systems Matrix: Generative LLMs vs. Jev vs. Repository Laya AI Pipeline
+### Technical Execution Payload and Calibrated Output Specification
 
-| System Parameter | Generative LLMs (GPT-4o) | Jev Rule Engine (TypeSafe API) | Laya AI Workflow in This Repository |
-| :--- | :--- | :--- | :--- |
-| **Inference Mechanism** | Autoregressive token sequence | Hosted single-pass decision API | **Local single forward-pass via Laya encoder** |
-| **Data Privacy Perimeter** | Multi-tenant cloud ingestion | External hosted cloud infrastructure | **Hardware-isolated local memory (Zero Egress)** |
-| **Triage Latency** | 1,500ms – 4,000ms | 300ms – 600ms (Network bound) | **< 40ms local execution** |
-| **Structural Reliability** | Vulnerable to syntax and key errors | Strictly typed per Jev rules schema | **Guaranteed typed output matching repository schema** |
-| **Confidence Scoring** | Uncalibrated generation logits | Cloud-calibrated probability | **RLCD-calibrated strictly proper probabilities** |
-| **Operating Cost** | Recurring cost per token | Metered monthly API billing | **$0.00 (Zero recurring infrastructure cost)** |
-
----
-
-### Practical Schema Invocation and Output
-
-The following schema demonstrates a live evaluation executed by the repository's \`LayaReceiptTriage\` class:
+The following payload exemplifies the input structure processed by the LayaReceiptTriage execution engine in production
 
 \`\`\`json
 {
-  "document_text_snippet": "Advanced Tech Solutions LLC - Simplified Tax Invoice - VAT Reg: 300123456789003 - Total: 460.00 SAR - Inclusive of 15% VAT",
+  "document_text_snippet": "Advanced Tech Solutions LLC - Simplified Tax Invoice - VAT Reg 300123456789003 - Total 460.00 SAR - Inclusive of 15% VAT",
   "evaluated_schema": {
     "doc_category": "choice",
     "is_zatca_compliant": "noul",
@@ -711,7 +681,7 @@ The following schema demonstrates a live evaluation executed by the repository's
 }
 \`\`\`
 
-The engine produces deterministic, mathematically calibrated metrics in under 35 milliseconds:
+The on-device runtime returns deterministic evaluations with calibrated probability distributions within 32 milliseconds
 
 \`\`\`json
 {
@@ -740,7 +710,7 @@ The engine produces deterministic, mathematically calibrated metrics in under 35
 \`\`\`
 
 > [!IMPORTANT]
-> Integrating the **Laya AI** workflow directly within **Receipt AI** eliminates reliance on both fragile generative LLMs and proprietary cloud decision APIs, establishing a private, high-speed, and zero-cost document triage and ZATCA compliance architecture.
+> Deploying the open-weight Laya AI decision architecture inside Receipt AI eliminates reliance on fragile generative backbones and cloud-hosted decision APIs, guaranteeing instantaneous document triage, strict ZATCA validation, and hardware-confined financial data isolation
 `,
     },
   },
