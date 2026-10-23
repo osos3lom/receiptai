@@ -1,15 +1,34 @@
 import type React from "react"
-import type { Metadata } from "next"
-import { Inter, Playfair_Display } from "next/font/google"
+import type { Metadata, Viewport } from "next"
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
 
-const _inter = Inter({ subsets: ["latin"] })
-const _playfair = Playfair_Display({ subsets: ["latin"] })
-
 export const metadata: Metadata = {
-  title: "Receipt AI — In-Browser WebGPU Vision Scanner",
-  description: "Extract receipt and invoice data privately in your browser using client-side WebGPU AI models.",
+  title: "قارئ الفواتير الذكي — Receipt AI",
+  description: "استخراج بيانات الفواتير والمستندات الضريبية محلياً بخصوصية تامة داخل المتصفح بتقنية WebGPU.",
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/app-icon.jpg" },
+    ],
+    apple: "/apple-icon.png",
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Receipt AI",
+  },
+}
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  maximumScale: 5,
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#F5F5F7" },
+    { media: "(prefers-color-scheme: dark)", color: "#000000" },
+  ],
 }
 
 export default function RootLayout({
@@ -18,8 +37,8 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
-      <body className="font-sans antialiased">
+    <html lang="ar" dir="rtl" suppressHydrationWarning>
+      <body className="font-sans antialiased min-h-screen selection:bg-primary/20 pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
         {children}
         <Analytics />
       </body>
