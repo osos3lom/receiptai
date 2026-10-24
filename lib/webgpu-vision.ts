@@ -287,7 +287,7 @@ export async function initVisionModel(
 
   try {
     const lib = await loadTransformersLibrary()
-    const { AutoProcessor, AutoModelForVision2Seq, RawImage, env } = lib
+    const { AutoProcessor, AutoModelForVision2Seq, AutoConfig, RawImage, env } = lib
     if (env) {
       env.allowRemoteModels = true
       env.allowLocalModels = false
@@ -331,9 +331,13 @@ export async function initVisionModel(
       }
     }
 
+    // Fetch base config to bypass "roberta" unsupported model type from osos3lom/receiptai config
+    const baseConfig = await AutoConfig.from_pretrained("HuggingFaceTB/SmolVLM-256M-Instruct");
+
     // Load fine-tuned vision model and processor from Hugging Face Hub (SmolVLM-256M in q4f16)
     const processor = await AutoProcessor.from_pretrained(repoId, {
       progress_callback: progressCallback,
+      config: baseConfig,
     })
 
     let model: any = null
@@ -342,6 +346,7 @@ export async function initVisionModel(
         dtype: "q4f16",
         device: currentBackend,
         progress_callback: progressCallback,
+        config: baseConfig,
       })
     } catch (modelErr) {
       if (currentBackend === "webgpu") {
@@ -359,6 +364,7 @@ export async function initVisionModel(
           dtype: "q4f16",
           device: "wasm",
           progress_callback: progressCallback,
+          config: baseConfig,
         })
       } else {
         throw modelErr
