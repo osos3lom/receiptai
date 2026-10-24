@@ -1,7 +1,7 @@
 /**
  * In-Browser WebGPU AI Vision Model Runner
  * Designed for client-side receipt recognition with WebGPU acceleration and browser caching.
- * Supports real Transformers.js in-browser inference with WASM fallback.
+ * Uses @huggingface/transformers v3.x via ESM CDN with single-file browser pipeline.
  */
 
 import { parseReceiptText, type ParsedReceipt } from "./receipt-parser"
@@ -99,14 +99,31 @@ export async function clearModelCache(): Promise<void> {
 }
 
 /**
+ * Loads Transformers.js v3.x from ESM CDN in browser, with fallback to bundled npm module
+ */
+async function loadTransformersLibrary(): Promise<any> {
+  if (typeof window !== "undefined") {
+    try {
+      // Use ESM CDN for single-file browser runtime
+      // @ts-ignore
+      const cdn = await import(/* webpackIgnore: true */ "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3")
+      if (cdn && cdn.pipeline) {
+        return cdn
+      }
+    } catch (e) {
+      console.warn("ESM CDN import failed, falling back to npm package:", e)
+    }
+  }
+  return await import("@huggingface/transformers")
+}
+
+/**
  * Initializes and downloads the in-browser vision model.
  * Connects to Hugging Face Transformers.js with real WebGPU compute shaders and Cache API.
  */
 export async function initVisionModel(
   onProgress: (p: ModelProgress) => void
 ): Promise<any> {
-  // Real byte counters. Download size is not known until the server reports it, so
-  // progress starts at zero rather than at an invented total.
   const fileBytes = new Map<string, { loaded: number; total: number }>()
   let bytesLoaded = 0
   let bytesTotal = 0
@@ -148,7 +165,6 @@ export async function initVisionModel(
       version: "2.1-mock",
     }
 
-    // No weights are downloaded in mock mode, so report zero rather than a fake size.
     onProgress({
       status: "ready",
       progress: 100,
@@ -161,11 +177,10 @@ export async function initVisionModel(
   }
 
   try {
-    const { pipeline, env } = await import("@huggingface/transformers")
+    const { pipeline, env } = await loadTransformersLibrary()
     if (env) {
       env.allowLocalModels = true
-      // Must carry the GitHub Pages basePath. A bare "/models" resolves to the domain
-      // root, so a site served from /<repo>/ would request /models/... and get a 404.
+      // Must carry the GitHub Pages basePath so the site can resolve local models
       env.localModelPath = getAssetPath("/models")
       env.useBrowserCache = true
       if (env.backends?.onnx) {
@@ -188,8 +203,6 @@ export async function initVisionModel(
 
     const progressCallback = (info: any) => {
       if (info.status === "progress" && info.total) {
-        // Accumulate across every file the pipeline pulls, so the figure shown is the
-        // real download rather than the progress of whichever file reported last.
         fileBytes.set(info.file || "weights", { loaded: info.loaded, total: info.total })
         bytesLoaded = 0
         bytesTotal = 0
@@ -209,16 +222,17 @@ export async function initVisionModel(
       }
     }
 
-    // Load fine-tuned WebGPU vision pipeline (SmolVLM-256M in q4f16)
+    // Load fine-tuned WebGPU vision pipeline with the supported task "image-to-text"
     let pipe: any = null
     try {
-      pipe = await pipeline("image-text-to-text", "receipt-ai-webgpu", {
+      pipe = await pipeline("image-to-text", "receipt-ai-webgpu", {
         dtype: "q4f16",
         device: currentBackend,
         progress_callback: progressCallback,
       })
-    } catch {
-      pipe = await pipeline("image-text-to-text", "HuggingFaceTB/SmolVLM-256M-Instruct", {
+    } catch (localErr) {
+      console.warn("Could not load from local path, attempting remote fallback:", localErr)
+      pipe = await pipeline("image-to-text", "HuggingFaceTB/SmolVLM-256M-Instruct", {
         dtype: "q4f16",
         device: currentBackend,
         progress_callback: progressCallback,
@@ -227,9 +241,6 @@ export async function initVisionModel(
 
     cachedPipeline = pipe
   } catch (err) {
-    // Do not degrade to a simulated engine while reporting "ready". A failed load
-    // must surface, otherwise the UI shows WebGPU and a confidence score for a
-    // session in which no model was ever loaded.
     console.error("Vision model initialization failed:", err)
     cachedPipeline = null
     onProgress({
@@ -274,27 +285,33 @@ export async function extractReceiptData(
           role: "user",
           content: [
             { type: "image" },
-            { type: "text", text: "Extract all receipt fields as JSON matching schema: store, tax_number, date, subtotal, vat_percent, vat_amount, total, currency, line_items." }
-          ]
-        }
+            {
+              type: "text",
+              text: "Extract all receipt fields as JSON matching schema: store, tax_number, date, subtotal, vat_percent, vat_amount, total, currency, line_items.",
+            },
+          ],
+        },
       ]
+
       const output = await model(imageSource, {
         prompt: messages,
-        // Answers run median ~360 tokens (p90 562, p99 637). The old cap of 256 cut 71% of
-        // them off mid-line_items. A shorter schema is the real fix (planned); until then
-        // the cap has to clear the longest observed answer.
         max_new_tokens: 768,
-        do_sample: false
+        do_sample: false,
       })
 
       if (Array.isArray(output) && output[0]?.generated_text) {
-        rawExtractedText = typeof output[0].generated_text === "string" 
-          ? output[0].generated_text 
-          : JSON.stringify(output[0].generated_text)
+        rawExtractedText =
+          typeof output[0].generated_text === "string"
+            ? output[0].generated_text
+            : JSON.stringify(output[0].generated_text)
       } else if (typeof output === "string") {
         rawExtractedText = output
-      } else if (typeof output === "object") {
-        rawExtractedText = JSON.stringify(output)
+      } else if (typeof output === "object" && output !== null) {
+        if ("generated_text" in output && typeof output.generated_text === "string") {
+          rawExtractedText = output.generated_text
+        } else {
+          rawExtractedText = JSON.stringify(output)
+        }
       }
     } catch (e) {
       console.warn("Client inference failed:", e)
@@ -303,7 +320,6 @@ export async function extractReceiptData(
       )
     }
   } else if (model?.isMock) {
-    // Mock mode is a development affordance. It must never look like a real reading.
     throw new InferenceUnavailableError(
       "Mock mode is active, so no model is loaded. Reload without ?mock=1 to extract."
     )
@@ -313,9 +329,7 @@ export async function extractReceiptData(
     )
   }
 
-  // An empty or near-empty transcription means the model could not read the document.
-  // Previously this substituted hardcoded receipt text, which produced confident,
-  // plausible, entirely fabricated results for any image. Fail visibly instead.
+  // An empty or near-empty transcription means the model could not read the document
   if (!rawExtractedText || rawExtractedText.trim().length < 5) {
     throw new InferenceUnavailableError(
       "The model could not read any text from this image. Try a sharper or better-lit photo."
