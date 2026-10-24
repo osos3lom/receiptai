@@ -419,13 +419,20 @@ export default function ReceiptDemo() {
   const handleExtract = async () => {
     if (!imagePreview) return
     setIsExtracting(true)
-
     setExtractError(null)
 
     try {
-      // Always pass the actual image data. Passing the sample's string id used to route
-      // into a hardcoded text fallback, so sample receipts never reached the model.
-      const extraction = await extractReceiptData(imagePreview, modelInstance)
+      // If the user skipped Step 1 and jumped straight to Step 2, auto-start the engine seamlessly (AIBaloot pattern)
+      let activeModel = modelInstance || getCachedVisionModel()
+      if (!activeModel || (typeof activeModel !== "function" && !activeModel.model && !activeModel.ready)) {
+        activeModel = await initVisionModel((p) => setModelState(p))
+        setModelInstance(activeModel)
+        setIsCached(true)
+        safeSetStorage("receipt_ai_started", "true", "session")
+      }
+
+      // Always pass the actual image data and streaming progress handler
+      const extraction = await extractReceiptData(imagePreview, activeModel, (p) => setModelState(p))
       setResult(extraction)
       setEditedReceipt({ ...extraction.parsed })
 

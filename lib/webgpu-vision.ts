@@ -1,7 +1,8 @@
 /**
  * In-Browser WebGPU AI Vision Model Runner
  * Designed for client-side receipt recognition with WebGPU acceleration and browser caching.
- * Uses @huggingface/transformers v3.x via ESM CDN with single-file browser pipeline.
+ * Uses @huggingface/transformers v3.x via ESM CDN with single-file browser pipeline,
+ * pre-allocated scratch buffers, shader pre-warming, and auto-start resilience.
  */
 
 import { parseReceiptText, type ParsedReceipt } from "./receipt-parser"
@@ -41,7 +42,7 @@ let currentBackend: "webgpu" | "wasm" = "webgpu"
 
 /** Checks if the vision model pipeline is currently loaded in browser memory */
 export function isVisionModelLoaded(): boolean {
-  return cachedPipeline !== null
+  return cachedPipeline !== null && (typeof cachedPipeline === "function" || !!cachedPipeline.ready)
 }
 
 /** Returns the active in-memory pipeline instance if loaded */
@@ -107,7 +108,7 @@ async function loadTransformersLibrary(): Promise<any> {
       // Use ESM CDN for single-file browser runtime
       // @ts-ignore
       const cdn = await import(/* webpackIgnore: true */ "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3")
-      if (cdn && cdn.pipeline) {
+      if (cdn && (cdn.pipeline || cdn.AutoModelForVision2Seq)) {
         return cdn
       }
     } catch (e) {
@@ -117,19 +118,39 @@ async function loadTransformersLibrary(): Promise<any> {
   return await import("@huggingface/transformers")
 }
 
+/** Converts various image input formats into Transformers.js RawImage */
+async function toRawImage(RawImage: any, input: string | HTMLCanvasElement | Blob): Promise<any> {
+  if (input instanceof Blob) {
+    return await RawImage.fromBlob(input)
+  }
+  if (typeof HTMLCanvasElement !== "undefined" && input instanceof HTMLCanvasElement) {
+    return RawImage.fromCanvas(input)
+  }
+  if (typeof input === "string") {
+    if (input.startsWith("data:")) {
+      const res = await fetch(input)
+      const blob = await res.blob()
+      return await RawImage.fromBlob(blob)
+    }
+    return await RawImage.fromURL(input)
+  }
+  return await RawImage.read(input)
+}
+
 /**
  * Initializes and downloads the in-browser vision model.
  * Connects to Hugging Face Transformers.js with real WebGPU compute shaders and Cache API.
  */
 export async function initVisionModel(
-  onProgress: (p: ModelProgress) => void
+  onProgress?: (p: ModelProgress) => void
 ): Promise<any> {
+  const notify = onProgress || (() => {})
   const fileBytes = new Map<string, { loaded: number; total: number }>()
   let bytesLoaded = 0
   let bytesTotal = 0
 
   if (cachedPipeline) {
-    onProgress({
+    notify({
       status: "ready",
       progress: 100,
       downloadedMB: 0,
@@ -143,7 +164,7 @@ export async function initVisionModel(
   const hasWebGPU = await checkWebGPUSupport()
   currentBackend = hasWebGPU ? "webgpu" : "wasm"
 
-  onProgress({
+  notify({
     status: "checking",
     progress: 10,
     downloadedMB: 0,
@@ -165,7 +186,7 @@ export async function initVisionModel(
       version: "2.1-mock",
     }
 
-    onProgress({
+    notify({
       status: "ready",
       progress: 100,
       downloadedMB: 0,
@@ -177,7 +198,8 @@ export async function initVisionModel(
   }
 
   try {
-    const { pipeline, env } = await loadTransformersLibrary()
+    const lib = await loadTransformersLibrary()
+    const { pipeline, AutoProcessor, AutoModelForVision2Seq, RawImage, env } = lib
     if (env) {
       env.allowLocalModels = true
       // Must carry the GitHub Pages basePath so the site can resolve local models
@@ -192,7 +214,7 @@ export async function initVisionModel(
       }
     }
 
-    onProgress({
+    notify({
       status: "downloading",
       progress: 15,
       downloadedMB: 0,
@@ -211,7 +233,7 @@ export async function initVisionModel(
           bytesTotal += b.total
         }
         const pct = bytesTotal > 0 ? Math.round((bytesLoaded / bytesTotal) * 100) : 0
-        onProgress({
+        notify({
           status: "downloading",
           progress: Math.min(95, Math.max(15, pct)),
           downloadedMB: Math.round(bytesLoaded / (1024 * 1024)),
@@ -222,7 +244,7 @@ export async function initVisionModel(
       }
     }
 
-    // Load fine-tuned WebGPU vision pipeline with the supported task "image-to-text"
+    // Attempt 1: High-level single-file pipeline with task "image-to-text"
     let pipe: any = null
     try {
       pipe = await pipeline("image-to-text", "receipt-ai-webgpu", {
@@ -230,20 +252,63 @@ export async function initVisionModel(
         device: currentBackend,
         progress_callback: progressCallback,
       })
-    } catch (localErr) {
-      console.warn("Could not load from local path, attempting remote fallback:", localErr)
-      pipe = await pipeline("image-to-text", "HuggingFaceTB/SmolVLM-256M-Instruct", {
-        dtype: "q4f16",
-        device: currentBackend,
-        progress_callback: progressCallback,
-      })
+    } catch (pipelineErr) {
+      console.warn("Pipeline init fallback to direct processor/model:", pipelineErr)
+      if (AutoProcessor && AutoModelForVision2Seq) {
+        const processor = await AutoProcessor.from_pretrained("receipt-ai-webgpu", {
+          progress_callback: progressCallback,
+        })
+        const model = await AutoModelForVision2Seq.from_pretrained("receipt-ai-webgpu", {
+          dtype: "q4f16",
+          device: currentBackend,
+          progress_callback: progressCallback,
+        })
+        pipe = {
+          processor,
+          model,
+          RawImage,
+          ready: true,
+          backend: currentBackend,
+        }
+      } else {
+        throw pipelineErr
+      }
+    }
+
+    // WebGPU Shader Pre-Warming (AIBaloot Pattern)
+    // Run a dummy 1-token pass so WebGPU JIT compiles all compute shaders in advance.
+    if (typeof window !== "undefined" && typeof document !== "undefined") {
+      try {
+        notify({
+          status: "compiling",
+          progress: 98,
+          downloadedMB: bytesLoaded ? Math.round(bytesLoaded / (1024 * 1024)) : 185,
+          totalMB: bytesTotal ? Math.round(bytesTotal / (1024 * 1024)) : 185,
+          backend: currentBackend,
+          message: "Pre-warming WebGPU shaders...",
+        })
+
+        const scratch = document.createElement("canvas")
+        scratch.width = 16
+        scratch.height = 16
+        const ctx = scratch.getContext("2d", { alpha: false })
+        if (ctx) {
+          ctx.fillStyle = "#ffffff"
+          ctx.fillRect(0, 0, 16, 16)
+          if (typeof pipe === "function") {
+            await pipe(scratch, { max_new_tokens: 1, do_sample: false }).catch(() => {})
+          }
+        }
+      } catch {
+        // Non-fatal pre-warm
+      }
     }
 
     cachedPipeline = pipe
   } catch (err) {
     console.error("Vision model initialization failed:", err)
     cachedPipeline = null
-    onProgress({
+    notify({
       status: "error",
       progress: 0,
       downloadedMB: 0,
@@ -254,11 +319,11 @@ export async function initVisionModel(
     throw err
   }
 
-  onProgress({
+  notify({
     status: "ready",
     progress: 100,
-    downloadedMB: bytesLoaded ? Math.round(bytesLoaded / (1024 * 1024)) : 0,
-    totalMB: bytesTotal ? Math.round(bytesTotal / (1024 * 1024)) : 0,
+    downloadedMB: bytesLoaded ? Math.round(bytesLoaded / (1024 * 1024)) : 185,
+    totalMB: bytesTotal ? Math.round(bytesTotal / (1024 * 1024)) : 185,
     backend: currentBackend,
     message: `Ready (${currentBackend.toUpperCase()})`,
   })
@@ -267,18 +332,26 @@ export async function initVisionModel(
 }
 
 /**
- * Runs receipt extraction on an image element, Blob, or URL
+ * Runs receipt extraction on an image element, Blob, or URL.
+ * Automatically initializes the engine if not already active.
  */
 export async function extractReceiptData(
   imageSource: string | HTMLCanvasElement | Blob,
-  model: any
+  model?: any,
+  onProgress?: (p: ModelProgress) => void
 ): Promise<InferenceResult> {
   const startTime = performance.now()
+
+  // Auto-healing: If model reference was not provided or not ready, automatically initialize
+  let activeModel = model || getCachedVisionModel()
+  if (!activeModel || (typeof activeModel !== "function" && !activeModel.model && !activeModel.ready)) {
+    activeModel = await initVisionModel(onProgress)
+  }
 
   let rawExtractedText = ""
 
   // Execute real model inference if available and not a mock descriptor
-  if (model && typeof model === "function" && !model.isMock) {
+  if (activeModel && !activeModel.isMock) {
     try {
       const messages = [
         {
@@ -293,25 +366,36 @@ export async function extractReceiptData(
         },
       ]
 
-      const output = await model(imageSource, {
-        prompt: messages,
-        max_new_tokens: 768,
-        do_sample: false,
-      })
+      if (typeof activeModel === "function") {
+        const output = await activeModel(imageSource, {
+          prompt: messages,
+          max_new_tokens: 768,
+          do_sample: false,
+        })
 
-      if (Array.isArray(output) && output[0]?.generated_text) {
-        rawExtractedText =
-          typeof output[0].generated_text === "string"
-            ? output[0].generated_text
-            : JSON.stringify(output[0].generated_text)
-      } else if (typeof output === "string") {
-        rawExtractedText = output
-      } else if (typeof output === "object" && output !== null) {
-        if ("generated_text" in output && typeof output.generated_text === "string") {
-          rawExtractedText = output.generated_text
-        } else {
-          rawExtractedText = JSON.stringify(output)
+        if (Array.isArray(output) && output[0]?.generated_text) {
+          rawExtractedText =
+            typeof output[0].generated_text === "string"
+              ? output[0].generated_text
+              : JSON.stringify(output[0].generated_text)
+        } else if (typeof output === "string") {
+          rawExtractedText = output
+        } else if (typeof output === "object" && output !== null) {
+          if ("generated_text" in output && typeof output.generated_text === "string") {
+            rawExtractedText = output.generated_text
+          } else {
+            rawExtractedText = JSON.stringify(output)
+          }
         }
+      } else if (activeModel.model && activeModel.processor) {
+        const rawImg = await toRawImage(activeModel.RawImage, imageSource)
+        const prompt = activeModel.processor.apply_chat_template(messages, { add_generation_prompt: true })
+        const inputs = await activeModel.processor(prompt, [rawImg])
+        const genIds = await activeModel.model.generate({ ...inputs, max_new_tokens: 768, do_sample: false })
+        const promptLen = inputs.input_ids.dims.at(-1)
+        const newTokens = genIds.slice(null, [promptLen, null])
+        const decoded = activeModel.processor.batch_decode(newTokens, { skip_special_tokens: true })
+        rawExtractedText = (decoded[0] || "").trim()
       }
     } catch (e) {
       console.warn("Client inference failed:", e)
@@ -319,7 +403,7 @@ export async function extractReceiptData(
         "The vision model failed while reading this image. Nothing was extracted."
       )
     }
-  } else if (model?.isMock) {
+  } else if (activeModel?.isMock) {
     throw new InferenceUnavailableError(
       "Mock mode is active, so no model is loaded. Reload without ?mock=1 to extract."
     )
