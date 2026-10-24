@@ -128,6 +128,7 @@ export default function ReceiptDemo() {
     backend: "none",
   })
   const [modelInstance, setModelInstance] = useState<any>(null)
+  const modelRef = useRef<any>(null)
 
   // Step 2: Upload state
   const [imagePreview, setImagePreview] = useState<string | null>(null)
@@ -218,7 +219,8 @@ export default function ReceiptDemo() {
       if (isVisionModelLoaded()) {
         const cachedModel = getCachedVisionModel()
         if (cachedModel) {
-          setModelInstance(cachedModel)
+          modelRef.current = cachedModel
+          setModelInstance(() => cachedModel)
           setModelState({
             status: "ready",
             progress: 100,
@@ -247,7 +249,8 @@ export default function ReceiptDemo() {
       const model = await initVisionModel((progress) => {
         setModelState(progress)
       })
-      setModelInstance(model)
+      modelRef.current = model
+      setModelInstance(() => model)
       setIsCached(true)
       safeSetStorage("receipt_ai_started", "true", "session")
     } catch {
@@ -263,6 +266,7 @@ export default function ReceiptDemo() {
   const handleClearCache = async () => {
     await clearModelCache()
     setIsCached(false)
+    modelRef.current = null
     setModelInstance(null)
     safeRemoveStorage("receipt_ai_started", "session")
     setModelState({
@@ -423,10 +427,11 @@ export default function ReceiptDemo() {
 
     try {
       // If the user skipped Step 1 and jumped straight to Step 2, auto-start the engine seamlessly (AIBaloot pattern)
-      let activeModel = modelInstance || getCachedVisionModel()
-      if (!activeModel || (typeof activeModel !== "function" && !activeModel.model && !activeModel.ready)) {
+      let activeModel = modelRef.current || modelInstance || getCachedVisionModel()
+      if (!activeModel || (!activeModel.ready && !activeModel.isMock)) {
         activeModel = await initVisionModel((p) => setModelState(p))
-        setModelInstance(activeModel)
+        modelRef.current = activeModel
+        setModelInstance(() => activeModel)
         setIsCached(true)
         safeSetStorage("receipt_ai_started", "true", "session")
       }

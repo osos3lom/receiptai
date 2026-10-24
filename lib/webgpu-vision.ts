@@ -1,8 +1,7 @@
 /**
  * In-Browser WebGPU AI Vision Model Runner
  * Designed for client-side receipt recognition with WebGPU acceleration and browser caching.
- * Uses @huggingface/transformers v3.x via ESM CDN with single-file browser pipeline,
- * pre-allocated scratch buffers, shader pre-warming, and auto-start resilience.
+ * Uses AutoProcessor + AutoModelForVision2Seq for SmolVLM / Idefics3 architecture.
  */
 
 import { parseReceiptText, type ParsedReceipt } from "./receipt-parser"
@@ -28,6 +27,15 @@ export interface InferenceResult {
   notice?: string
 }
 
+export interface VisionEngineInstance {
+  processor: any
+  model: any
+  RawImage: any
+  ready: boolean
+  backend: "webgpu" | "wasm"
+  isMock?: boolean
+}
+
 /** Thrown when no real inference could be performed. Never substitute canned text. */
 export class InferenceUnavailableError extends Error {
   constructor(message: string) {
@@ -37,17 +45,17 @@ export class InferenceUnavailableError extends Error {
 }
 
 // Global cached pipeline reference
-let cachedPipeline: any = null
+let cachedEngine: VisionEngineInstance | null = null
 let currentBackend: "webgpu" | "wasm" = "webgpu"
 
 /** Checks if the vision model pipeline is currently loaded in browser memory */
 export function isVisionModelLoaded(): boolean {
-  return cachedPipeline !== null && (typeof cachedPipeline === "function" || !!cachedPipeline.ready)
+  return cachedEngine !== null && !!cachedEngine.ready
 }
 
 /** Returns the active in-memory pipeline instance if loaded */
-export function getCachedVisionModel(): any {
-  return cachedPipeline
+export function getCachedVisionModel(): VisionEngineInstance | null {
+  return cachedEngine
 }
 
 /** Checks if the browser supports WebGPU safely without throwing unhandled exceptions */
@@ -85,7 +93,7 @@ export async function isModelCachedInBrowser(): Promise<boolean> {
 
 /** Clear model cache from browser storage safely */
 export async function clearModelCache(): Promise<void> {
-  cachedPipeline = null
+  cachedEngine = null
   if (typeof window === "undefined" || !window.caches) return
   try {
     const keys = await window.caches.keys()
@@ -108,7 +116,7 @@ async function loadTransformersLibrary(): Promise<any> {
       // Use ESM CDN for single-file browser runtime
       // @ts-ignore
       const cdn = await import(/* webpackIgnore: true */ "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3")
-      if (cdn && (cdn.pipeline || cdn.AutoModelForVision2Seq)) {
+      if (cdn && (cdn.AutoProcessor || cdn.pipeline)) {
         return cdn
       }
     } catch (e) {
@@ -118,8 +126,14 @@ async function loadTransformersLibrary(): Promise<any> {
   return await import("@huggingface/transformers")
 }
 
-/** Converts various image input formats into Transformers.js RawImage */
+/** Converts various image input formats into Transformers.js RawImage safely */
 async function toRawImage(RawImage: any, input: string | HTMLCanvasElement | Blob): Promise<any> {
+  if (!input) {
+    throw new Error("No image source provided for vision model.")
+  }
+  if (input instanceof RawImage) {
+    return input
+  }
   if (input instanceof Blob) {
     return await RawImage.fromBlob(input)
   }
@@ -132,7 +146,7 @@ async function toRawImage(RawImage: any, input: string | HTMLCanvasElement | Blo
       const blob = await res.blob()
       return await RawImage.fromBlob(blob)
     }
-    return await RawImage.fromURL(input)
+    return await RawImage.read(input)
   }
   return await RawImage.read(input)
 }
@@ -143,13 +157,13 @@ async function toRawImage(RawImage: any, input: string | HTMLCanvasElement | Blo
  */
 export async function initVisionModel(
   onProgress?: (p: ModelProgress) => void
-): Promise<any> {
+): Promise<VisionEngineInstance> {
   const notify = onProgress || (() => {})
   const fileBytes = new Map<string, { loaded: number; total: number }>()
   let bytesLoaded = 0
   let bytesTotal = 0
 
-  if (cachedPipeline) {
+  if (cachedEngine && cachedEngine.ready) {
     notify({
       status: "ready",
       progress: 100,
@@ -158,7 +172,7 @@ export async function initVisionModel(
       backend: currentBackend,
       message: "Ready (cached in memory)",
     })
-    return cachedPipeline
+    return cachedEngine
   }
 
   const hasWebGPU = await checkWebGPUSupport()
@@ -179,11 +193,13 @@ export async function initVisionModel(
   if (isMockMode) {
     await new Promise((r) => setTimeout(r, 200))
 
-    cachedPipeline = {
+    cachedEngine = {
+      processor: null,
+      model: null,
+      RawImage: null,
       isMock: true,
       ready: true,
       backend: currentBackend,
-      version: "2.1-mock",
     }
 
     notify({
@@ -194,12 +210,12 @@ export async function initVisionModel(
       backend: currentBackend,
       message: "MOCK MODE - no model loaded, extraction is disabled",
     })
-    return cachedPipeline
+    return cachedEngine
   }
 
   try {
     const lib = await loadTransformersLibrary()
-    const { pipeline, AutoProcessor, AutoModelForVision2Seq, RawImage, env } = lib
+    const { AutoProcessor, AutoModelForVision2Seq, RawImage, env } = lib
     if (env) {
       env.allowLocalModels = true
       // Must carry the GitHub Pages basePath so the site can resolve local models
@@ -244,70 +260,30 @@ export async function initVisionModel(
       }
     }
 
-    // Attempt 1: High-level single-file pipeline with task "image-to-text"
-    let pipe: any = null
-    try {
-      pipe = await pipeline("image-to-text", "receipt-ai-webgpu", {
-        dtype: "q4f16",
-        device: currentBackend,
-        progress_callback: progressCallback,
-      })
-    } catch (pipelineErr) {
-      console.warn("Pipeline init fallback to direct processor/model:", pipelineErr)
-      if (AutoProcessor && AutoModelForVision2Seq) {
-        const processor = await AutoProcessor.from_pretrained("receipt-ai-webgpu", {
-          progress_callback: progressCallback,
-        })
-        const model = await AutoModelForVision2Seq.from_pretrained("receipt-ai-webgpu", {
-          dtype: "q4f16",
-          device: currentBackend,
-          progress_callback: progressCallback,
-        })
-        pipe = {
-          processor,
-          model,
-          RawImage,
-          ready: true,
-          backend: currentBackend,
-        }
-      } else {
-        throw pipelineErr
-      }
+    // Load fine-tuned WebGPU vision model and processor (SmolVLM-256M in q4f16)
+    const processor = await AutoProcessor.from_pretrained("receipt-ai-webgpu", {
+      progress_callback: progressCallback,
+    })
+
+    const model = await AutoModelForVision2Seq.from_pretrained("receipt-ai-webgpu", {
+      dtype: "q4f16",
+      device: currentBackend,
+      progress_callback: progressCallback,
+    })
+
+    const engine: VisionEngineInstance = {
+      processor,
+      model,
+      RawImage,
+      ready: true,
+      backend: currentBackend,
+      isMock: false,
     }
 
-    // WebGPU Shader Pre-Warming (AIBaloot Pattern)
-    // Run a dummy 1-token pass so WebGPU JIT compiles all compute shaders in advance.
-    if (typeof window !== "undefined" && typeof document !== "undefined") {
-      try {
-        notify({
-          status: "compiling",
-          progress: 98,
-          downloadedMB: bytesLoaded ? Math.round(bytesLoaded / (1024 * 1024)) : 185,
-          totalMB: bytesTotal ? Math.round(bytesTotal / (1024 * 1024)) : 185,
-          backend: currentBackend,
-          message: "Pre-warming WebGPU shaders...",
-        })
-
-        const scratch = document.createElement("canvas")
-        scratch.width = 16
-        scratch.height = 16
-        const ctx = scratch.getContext("2d", { alpha: false })
-        if (ctx) {
-          ctx.fillStyle = "#ffffff"
-          ctx.fillRect(0, 0, 16, 16)
-          if (typeof pipe === "function") {
-            await pipe(scratch, { max_new_tokens: 1, do_sample: false }).catch(() => {})
-          }
-        }
-      } catch {
-        // Non-fatal pre-warm
-      }
-    }
-
-    cachedPipeline = pipe
+    cachedEngine = engine
   } catch (err) {
     console.error("Vision model initialization failed:", err)
-    cachedPipeline = null
+    cachedEngine = null
     notify({
       status: "error",
       progress: 0,
@@ -328,7 +304,7 @@ export async function initVisionModel(
     message: `Ready (${currentBackend.toUpperCase()})`,
   })
 
-  return cachedPipeline
+  return cachedEngine
 }
 
 /**
@@ -343,16 +319,17 @@ export async function extractReceiptData(
   const startTime = performance.now()
 
   // Auto-healing: If model reference was not provided or not ready, automatically initialize
-  let activeModel = model || getCachedVisionModel()
-  if (!activeModel || (typeof activeModel !== "function" && !activeModel.model && !activeModel.ready)) {
-    activeModel = await initVisionModel(onProgress)
+  let activeEngine = model || getCachedVisionModel()
+  if (!activeEngine || (!activeEngine.ready && !activeEngine.isMock)) {
+    activeEngine = await initVisionModel(onProgress)
   }
 
   let rawExtractedText = ""
 
-  // Execute real model inference if available and not a mock descriptor
-  if (activeModel && !activeModel.isMock) {
+  if (activeEngine && !activeEngine.isMock) {
     try {
+      const rawImg = await toRawImage(activeEngine.RawImage, imageSource)
+
       const messages = [
         {
           role: "user",
@@ -366,44 +343,27 @@ export async function extractReceiptData(
         },
       ]
 
-      if (typeof activeModel === "function") {
-        const output = await activeModel(imageSource, {
-          prompt: messages,
-          max_new_tokens: 768,
-          do_sample: false,
-        })
+      const prompt = activeEngine.processor.apply_chat_template(messages, { add_generation_prompt: true })
+      const inputs = await activeEngine.processor(prompt, [rawImg])
 
-        if (Array.isArray(output) && output[0]?.generated_text) {
-          rawExtractedText =
-            typeof output[0].generated_text === "string"
-              ? output[0].generated_text
-              : JSON.stringify(output[0].generated_text)
-        } else if (typeof output === "string") {
-          rawExtractedText = output
-        } else if (typeof output === "object" && output !== null) {
-          if ("generated_text" in output && typeof output.generated_text === "string") {
-            rawExtractedText = output.generated_text
-          } else {
-            rawExtractedText = JSON.stringify(output)
-          }
-        }
-      } else if (activeModel.model && activeModel.processor) {
-        const rawImg = await toRawImage(activeModel.RawImage, imageSource)
-        const prompt = activeModel.processor.apply_chat_template(messages, { add_generation_prompt: true })
-        const inputs = await activeModel.processor(prompt, [rawImg])
-        const genIds = await activeModel.model.generate({ ...inputs, max_new_tokens: 768, do_sample: false })
-        const promptLen = inputs.input_ids.dims.at(-1)
-        const newTokens = genIds.slice(null, [promptLen, null])
-        const decoded = activeModel.processor.batch_decode(newTokens, { skip_special_tokens: true })
-        rawExtractedText = (decoded[0] || "").trim()
-      }
+      const generatedIds = await activeEngine.model.generate({
+        ...inputs,
+        max_new_tokens: 768,
+        do_sample: false,
+      })
+
+      // Extract only newly generated token IDs by slicing past prompt length
+      const promptLen = inputs.input_ids.dims.at(-1)
+      const newTokens = generatedIds.slice(null, [promptLen, null])
+      const decoded = activeEngine.processor.batch_decode(newTokens, { skip_special_tokens: true })
+      rawExtractedText = (decoded[0] || "").trim()
     } catch (e) {
       console.warn("Client inference failed:", e)
       throw new InferenceUnavailableError(
         "The vision model failed while reading this image. Nothing was extracted."
       )
     }
-  } else if (activeModel?.isMock) {
+  } else if (activeEngine?.isMock) {
     throw new InferenceUnavailableError(
       "Mock mode is active, so no model is loaded. Reload without ?mock=1 to extract."
     )
