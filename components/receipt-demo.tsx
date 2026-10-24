@@ -54,6 +54,7 @@ import {
   clearModelCache,
   initVisionModel,
   extractReceiptData,
+  InferenceUnavailableError,
   type ModelProgress,
   type InferenceResult,
 } from "@/lib/webgpu-vision"
@@ -454,6 +455,23 @@ export default function ReceiptDemo() {
       // as though it belonged to the newly uploaded image.
       setResult(null)
       setEditedReceipt(null)
+
+      // A dropped engine leaves these references pointing at dead ONNX sessions, so release
+      // them and send the user back to Step 1 rather than retrying against a dead device.
+      if (err instanceof InferenceUnavailableError && err.engineDropped) {
+        modelRef.current = null
+        setModelInstance(null)
+        setIsCached(false)
+        safeRemoveStorage("receipt_ai_started", "session")
+        setModelState({
+          status: "idle",
+          progress: 0,
+          downloadedMB: 0,
+          totalMB: 185,
+          backend: "none",
+        })
+      }
+
       setExtractError(
         err instanceof Error
           ? err.message

@@ -38,15 +38,50 @@ export interface VisionEngineInstance {
 
 /** Thrown when no real inference could be performed. Never substitute canned text. */
 export class InferenceUnavailableError extends Error {
-  constructor(message: string) {
+  /** Set when the loaded engine was discarded, so the caller must start it again before retrying. */
+  readonly engineDropped: boolean
+
+  constructor(message: string, engineDropped = false) {
     super(message)
     this.name = "InferenceUnavailableError"
+    this.engineDropped = engineDropped
   }
 }
 
 // Global cached pipeline reference
 let cachedEngine: VisionEngineInstance | null = null
 let currentBackend: "webgpu" | "wasm" = "webgpu"
+
+/** A receipt JSON payload fits well inside this, and a smaller budget keeps the GPU responsive. */
+const MAX_NEW_TOKENS = 384
+/** A lost GPU device never settles the generate promise, so the read needs its own deadline. */
+const GENERATE_TIMEOUT_MS = 120_000
+/** The encoder squashes to 512px anyway, so a larger source only costs memory and CPU. */
+const MAX_SOURCE_EDGE = 1024
+
+/** True when the error is a dropped or hung GPU device rather than a model-level failure */
+function isDeviceLost(err: unknown): boolean {
+  const text = err instanceof Error ? `${err.name} ${err.message}` : String(err)
+  return /device.{0,12}(is )?lost|DEVICE_HUNG|device removed/i.test(text)
+}
+
+/** Rejects if the underlying promise never settles, which a lost GPU device causes */
+async function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`Inference did not finish within ${Math.round(ms / 1000)}s. The GPU device may be lost.`)),
+          ms
+        )
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
 
 /** Checks if the vision model pipeline is currently loaded in browser memory */
 export function isVisionModelLoaded(): boolean {
@@ -126,29 +161,39 @@ async function loadTransformersLibrary(): Promise<any> {
   return await import("@huggingface/transformers")
 }
 
+/** Caps the longest edge so the preprocessor never builds a multi-megapixel working tensor */
+async function capLongestEdge(image: any): Promise<any> {
+  const longest = Math.max(image.width || 0, image.height || 0)
+  if (!longest || longest <= MAX_SOURCE_EDGE) {
+    return image
+  }
+  const scale = MAX_SOURCE_EDGE / longest
+  return await image.resize(Math.round(image.width * scale), Math.round(image.height * scale))
+}
+
 /** Converts various image input formats into Transformers.js RawImage safely */
 async function toRawImage(RawImage: any, input: string | HTMLCanvasElement | Blob): Promise<any> {
   if (!input) {
     throw new Error("No image source provided for vision model.")
   }
   if (input instanceof RawImage) {
-    return input
+    return await capLongestEdge(input)
   }
   if (input instanceof Blob) {
-    return await RawImage.fromBlob(input)
+    return await capLongestEdge(await RawImage.fromBlob(input))
   }
   if (typeof HTMLCanvasElement !== "undefined" && input instanceof HTMLCanvasElement) {
-    return RawImage.fromCanvas(input)
+    return await capLongestEdge(RawImage.fromCanvas(input))
   }
   if (typeof input === "string") {
     if (input.startsWith("data:")) {
       const res = await fetch(input)
       const blob = await res.blob()
-      return await RawImage.fromBlob(blob)
+      return await capLongestEdge(await RawImage.fromBlob(blob))
     }
-    return await RawImage.read(input)
+    return await capLongestEdge(await RawImage.read(input))
   }
-  return await RawImage.read(input)
+  return await capLongestEdge(await RawImage.read(input))
 }
 
 /**
@@ -344,13 +389,23 @@ export async function extractReceiptData(
       ]
 
       const prompt = activeEngine.processor.apply_chat_template(messages, { add_generation_prompt: true })
-      const inputs = await activeEngine.processor(prompt, [rawImg])
 
-      const generatedIds = await activeEngine.model.generate({
-        ...inputs,
-        max_new_tokens: 768,
-        do_sample: false,
+      // Image splitting tiles the receipt into 512px patches at a 2048px working size, so a
+      // single page becomes 17 vision passes and ~1100 image tokens. That overruns the GPU
+      // watchdog and the device is lost mid-generate (DXGI_ERROR_DEVICE_HUNG). One global
+      // patch keeps the encoder at 64 image tokens, which is what this model was served for.
+      const inputs = await activeEngine.processor(prompt, [rawImg], {
+        do_image_splitting: false,
       })
+
+      const generatedIds: any = await withDeadline(
+        activeEngine.model.generate({
+          ...inputs,
+          max_new_tokens: MAX_NEW_TOKENS,
+          do_sample: false,
+        }),
+        GENERATE_TIMEOUT_MS
+      )
 
       // Extract only newly generated token IDs by slicing past prompt length
       const promptLen = inputs.input_ids.dims.at(-1)
@@ -359,6 +414,17 @@ export async function extractReceiptData(
       rawExtractedText = (decoded[0] || "").trim()
     } catch (e) {
       console.warn("Client inference failed:", e)
+
+      // A lost or hung GPU device leaves every ONNX session in this engine unusable, so drop
+      // the cached engine and let the next attempt rebuild it instead of failing forever.
+      if (isDeviceLost(e)) {
+        cachedEngine = null
+        throw new InferenceUnavailableError(
+          "The GPU driver dropped the model mid-read. Start the engine again and retry, or use a smaller image.",
+          true
+        )
+      }
+
       throw new InferenceUnavailableError(
         "The vision model failed while reading this image. Nothing was extracted."
       )
