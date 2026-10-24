@@ -1,3 +1,4 @@
+import type { LayaReceiptTriageResult } from "./laya-triage"
 /**
  * Receipt Text Normalization, Extraction & Audit Utilities
  * Supports digital SaaS invoices, Arabic tax invoices (ZATCA), and English thermal receipts.
@@ -28,6 +29,8 @@ export interface ParsedReceipt {
   mathDifference: number
   /** False when subtotal, VAT amount and total were not all read, so the check cannot run. */
   mathCheckable?: boolean
+  /** Triage results from Laya AI */
+  layaTriage?: LayaReceiptTriageResult
   /** Fields the model did not return. They stay empty rather than being defaulted. */
   missingFields?: string[]
   /** Present only for the OCR-text heuristic path. Model-JSON results carry none. */

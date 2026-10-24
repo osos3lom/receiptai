@@ -35,6 +35,12 @@ export interface TranslationDictionary {
 
   // Step 3
   step3Title: string
+  layaEngineTitle: string
+  layaCatLabel: string
+  layaComplianceLabel: string
+  layaCompliancePassed: string
+  layaComplianceFailed: string
+  layaConfidenceLabel: string
   step3Tip: string
   mathReconciled: string
   mathDiff: string
@@ -129,6 +135,12 @@ export const translations: Record<Language, TranslationDictionary> = {
     scanningBtn: "جارِ الفحص...",
 
     step3Title: "التدقيق",
+    layaEngineTitle: "محرك لايا للالتزام",
+    layaCatLabel: "فئة المستند",
+    layaComplianceLabel: "التزام هيئة الزكاة (ZATCA)",
+    layaCompliancePassed: "متوافق",
+    layaComplianceFailed: "غير متوافق",
+    layaConfidenceLabel: "مستوى الثقة",
     step3Tip: "مقارنة الحقول المستخرجة وتدقيق الضريبة.",
     mathReconciled: "متطابق ضريبياً",
     mathDiff: "فارق حسابي",
@@ -214,6 +226,12 @@ export const translations: Record<Language, TranslationDictionary> = {
     scanningBtn: "Scanning...",
 
     step3Title: "Audit",
+    layaEngineTitle: "Laya AI Compliance Engine",
+    layaCatLabel: "DOCUMENT CATEGORY",
+    layaComplianceLabel: "ZATCA COMPLIANCE",
+    layaCompliancePassed: "Compliant",
+    layaComplianceFailed: "Non-Compliant",
+    layaConfidenceLabel: "Confidence Score",
     step3Tip: "Validate extracted fields and tax math.",
     mathReconciled: "Matched",
     mathDiff: "Diff",

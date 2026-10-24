@@ -17,6 +17,7 @@ import {
   ShieldCheck,
   Receipt,
   Zap,
+  Activity,
   ZoomIn,
   ZoomOut,
   RotateCcw,
@@ -46,6 +47,7 @@ import { Progress } from "@/components/ui/progress"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip"
+import { runLayaTriage } from "@/lib/laya-triage"
 import {
   checkWebGPUSupport,
   isModelCachedInBrowser,
@@ -55,6 +57,9 @@ import {
   initVisionModel,
   extractReceiptData,
   InferenceUnavailableError,
+  HF_MODEL_URL,
+  HF_MODEL_REPO,
+  MODEL_TOTAL_MB,
   type ModelProgress,
   type InferenceResult,
 } from "@/lib/webgpu-vision"
@@ -125,7 +130,7 @@ export default function ReceiptDemo() {
     status: "idle",
     progress: 0,
     downloadedMB: 0,
-    totalMB: 185,
+    totalMB: MODEL_TOTAL_MB,
     backend: "none",
   })
   const [modelInstance, setModelInstance] = useState<any>(null)
@@ -225,8 +230,8 @@ export default function ReceiptDemo() {
           setModelState({
             status: "ready",
             progress: 100,
-            downloadedMB: 185,
-            totalMB: 185,
+            downloadedMB: MODEL_TOTAL_MB,
+            totalMB: MODEL_TOTAL_MB,
             backend: cachedModel.backend || (gpuOk ? "webgpu" : "wasm"),
           })
           setIsCached(true)
@@ -244,12 +249,12 @@ export default function ReceiptDemo() {
     }
   }, [result])
 
-  // Step 1 Handler: Download and initialize model
+  // Step 1 Handler: Download and initialize model from Hugging Face
   const handleStartModel = async () => {
     try {
       const model = await initVisionModel((progress) => {
         setModelState(progress)
-      })
+      }, HF_MODEL_URL)
       modelRef.current = model
       setModelInstance(() => model)
       setIsCached(true)
@@ -258,7 +263,7 @@ export default function ReceiptDemo() {
       setModelState((prev) => ({
         ...prev,
         status: "error",
-        message: isRTL ? "تعذر تشغيل المحرك" : "Failed to start model",
+        message: isRTL ? "تعذر تشغيل المحرك من Hugging Face" : "Failed to start model from Hugging Face",
       }))
     }
   }
@@ -274,7 +279,7 @@ export default function ReceiptDemo() {
       status: "idle",
       progress: 0,
       downloadedMB: 0,
-      totalMB: 185,
+      totalMB: MODEL_TOTAL_MB,
       backend: "none",
     })
     setDownloadNotice(t.purged)
@@ -497,6 +502,15 @@ export default function ReceiptDemo() {
 
       // Always pass the actual image data and streaming progress handler
       const extraction = await extractReceiptData(imagePreview, activeModel, (p) => setModelState(p))
+
+      // Run Laya AI compliance triage on the extracted text
+      try {
+        const triageResult = await runLayaTriage(extraction.rawText)
+        extraction.parsed.layaTriage = triageResult
+      } catch (err) {
+        console.warn("Laya Triage failed:", err)
+      }
+
       setResult(extraction)
       setEditedReceipt({ ...extraction.parsed })
 
@@ -525,7 +539,7 @@ export default function ReceiptDemo() {
           status: "idle",
           progress: 0,
           downloadedMB: 0,
-          totalMB: 185,
+          totalMB: MODEL_TOTAL_MB,
           backend: "none",
         })
       }
@@ -913,9 +927,22 @@ export default function ReceiptDemo() {
                     </span>
                   )}
                 </h2>
-                <span className="text-xs text-muted-foreground hidden sm:block">
-                  {lang === "ar" ? "WebGPU • محلي ١٠٠٪" : "WebGPU • 100% Private"}
-                </span>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span className="hidden sm:inline">
+                    {lang === "ar" ? "WebGPU • محلي ١٠٠٪" : "WebGPU • 100% Private"}
+                  </span>
+                  <span className="hidden sm:inline text-muted-foreground/40">•</span>
+                  <a
+                    href={HF_MODEL_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-primary hover:underline font-mono"
+                    title={lang === "ar" ? "عرض النموذج على Hugging Face" : "View model on Hugging Face"}
+                  >
+                    <span>{HF_MODEL_REPO}</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
               </div>
               <InfoTip content={t.step1Tip} />
             </div>
@@ -930,9 +957,20 @@ export default function ReceiptDemo() {
 
           {modelState.status === "idle" && !modelInstance && (
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-4 sm:p-5 rounded-2xl bg-secondary/30 border border-border/70">
-              <div className="flex items-center gap-2.5 text-sm font-bold text-muted-foreground">
-                <Zap className="w-5 h-5 text-primary" />
-                <span className="font-mono text-foreground text-sm sm:text-base">{webGpuAvailable ? "WebGPU Engine" : "WASM Engine"}</span>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 text-sm font-bold text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <Zap className="w-5 h-5 text-primary" />
+                  <span className="font-mono text-foreground text-sm sm:text-base">{webGpuAvailable ? "WebGPU Engine" : "WASM Engine"}</span>
+                </div>
+                <a
+                  href={HF_MODEL_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-normal text-muted-foreground hover:text-foreground flex items-center gap-1 font-mono transition-colors"
+                >
+                  <span>Hugging Face ({HF_MODEL_REPO})</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
               </div>
               <Button onClick={handleStartModel} className="rounded-2xl h-14 sm:h-16 px-6 text-base sm:text-lg font-extrabold gap-2.5 w-full sm:w-auto min-h-[56px] shadow-sm active:scale-95">
                 <Download className="w-5 h-5 sm:w-6 sm:h-6" />
@@ -1424,6 +1462,74 @@ export default function ReceiptDemo() {
                     />
                   </div>
                 </div>
+
+                {/* Laya AI Compliance Engine: Apple-style Glassmorphism Triage Card */}
+                {editedReceipt.layaTriage && (
+                  <div className="p-4 sm:p-5 rounded-3xl border border-white/20 bg-card/60 backdrop-blur-xl shadow-lg relative overflow-hidden space-y-4">
+                    <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -z-10 -mr-10 -mt-10"></div>
+
+                    <div className="flex items-center justify-between pb-3 border-b border-border/50">
+                      <div className="flex items-center gap-2">
+                         <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+                            <Activity className="w-4 h-4 text-primary" />
+                         </div>
+                         <h3 className="font-extrabold text-sm sm:text-base tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-foreground to-foreground/70">
+                            {t.layaEngineTitle}
+                         </h3>
+                      </div>
+                      <Badge variant="outline" className="font-mono text-[10px] sm:text-xs bg-background/50 border-border shadow-sm">
+                        ONNX WebGPU
+                      </Badge>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Document Category */}
+                      <div className="bg-secondary/40 p-3.5 rounded-2xl border border-border/50 flex flex-col gap-1.5 shadow-sm">
+                         <span className="text-[11px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t.layaCatLabel || "Document Category"}</span>
+                         <span className="text-sm sm:text-base font-black text-foreground">{editedReceipt.layaTriage.documentCategory}</span>
+                      </div>
+
+                      {/* Compliance Status */}
+                      <div className={`p-3.5 rounded-2xl border flex flex-col gap-1.5 shadow-sm ${editedReceipt.layaTriage.zatcaCompliance.passed ? "bg-success/10 border-success/20" : "bg-warning/10 border-warning/20"}`}>
+                         <span className="text-[11px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t.layaComplianceLabel || "ZATCA Compliance"}</span>
+                         <div className="flex items-center gap-1.5">
+                            {editedReceipt.layaTriage.zatcaCompliance.passed ? (
+                              <>
+                                <CheckCircle2 className="w-4 h-4 text-success" />
+                                <span className="text-sm sm:text-base font-black text-success">{t.layaCompliancePassed}</span>
+                              </>
+                            ) : (
+                              <>
+                                <AlertCircle className="w-4 h-4 text-warning" />
+                                <span className="text-sm sm:text-base font-black text-warning">{t.layaComplianceFailed || "Review Required"}</span>
+                              </>
+                            )}
+                         </div>
+                      </div>
+                    </div>
+
+                    {/* Review Issues if any */}
+                    {!editedReceipt.layaTriage.zatcaCompliance.passed && editedReceipt.layaTriage.zatcaCompliance.issues.length > 0 && (
+                      <div className="bg-destructive/10 p-3 rounded-xl border border-destructive/20 text-xs text-destructive font-medium flex flex-col gap-1">
+                        {editedReceipt.layaTriage.zatcaCompliance.issues.map((issue, idx) => (
+                          <div key={idx} className="flex items-center gap-1.5">
+                            <span className="w-1 h-1 rounded-full bg-destructive/60 shrink-0"></span>
+                            <span>{issue}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Confidence Score Bar */}
+                    <div className="pt-1">
+                      <div className="flex items-center justify-between text-[10px] sm:text-xs font-bold mb-1.5">
+                        <span className="text-muted-foreground">{t.layaConfidenceLabel}</span>
+                        <span className="font-mono text-primary">{Math.round(editedReceipt.layaTriage.confidenceScore * 100)}%</span>
+                      </div>
+                      <Progress value={editedReceipt.layaTriage.confidenceScore * 100} className="h-2 bg-secondary/50 rounded-full" />
+                    </div>
+                  </div>
+                )}
 
                 {/* Financial Totals Strip: Prominent High-Visibility Display on iPhone */}
                 <div className="p-4 sm:p-5 rounded-2xl border-2 border-border/80 bg-secondary/30 shadow-xs space-y-3">
