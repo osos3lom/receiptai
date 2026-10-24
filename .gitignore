@@ -28,3 +28,29 @@ next-env.d.ts
 
 # agents
 .agents/
+
+# data pipeline & training
+/data-pipeline/
+/checkpoints/**
+!/checkpoints/smolvlm-receipt-v3-combined/
+!/checkpoints/smolvlm-receipt-v3-combined/**
+!/checkpoints/smolvlm-receipt-v3-combined/*.safetensors
+/datasets/
+/data/
+/wandb/
+/runs/
+/lightning_logs/
+
+# python & ml artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.pt
+*.pth
+*.bin
+*.safetensors
+!/checkpoints/smolvlm-receipt-v3-combined/*.safetensors
+*.ckpt
+.venv/
+venv/
+env/

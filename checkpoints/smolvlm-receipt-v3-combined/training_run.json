@@ -1,0 +1,42 @@
+{
+  "base_model": "HuggingFaceTB/SmolVLM-256M-Instruct",
+  "manifest": "data-pipeline/train_manifest_combined.jsonl",
+  "train_samples": 2275,
+  "val_samples": 275,
+  "epochs_requested": 3,
+  "epochs_run": 3,
+  "effective_batch_size": 8,
+  "learning_rate": 0.0002,
+  "lr_schedule": "cosine_with_warmup",
+  "warmup_ratio": 0.03,
+  "max_grad_norm": 1.0,
+  "lora": {
+    "r": 16,
+    "alpha": 32,
+    "dropout": 0.05,
+    "n_target_modules": 211,
+    "include_vision": false
+  },
+  "seed": 42,
+  "loss": "masked_to_assistant_answer_only",
+  "best_val_loss": 0.1909480790379034,
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 0.45977688717973103,
+      "val_loss": 0.23281218040395868
+    },
+    {
+      "epoch": 2,
+      "train_loss": 0.19188902274101646,
+      "val_loss": 0.19443709138780832
+    },
+    {
+      "epoch": 3,
+      "train_loss": 0.16723566933688555,
+      "val_loss": 0.1909480790379034
+    }
+  ],
+  "elapsed_minutes": 158.93,
+  "gpu": "NVIDIA GeForce RTX 2080 Ti"
+}
