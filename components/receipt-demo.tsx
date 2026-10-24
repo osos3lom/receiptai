@@ -305,114 +305,172 @@ export default function ReceiptDemo() {
     setImageName(sample?.label || "Sample")
     setImageZoom(1)
 
-    // Draw preview canvas
+    // Draw preview canvas with crisp contrast and complete metadata
     const canvas = document.createElement("canvas")
-    canvas.width = 520
-    canvas.height = 620
-    const ctx = canvas.getContext("2d")
+    canvas.width = 540
+    canvas.height = 680
+    const ctx = canvas.getContext("2d", { alpha: false, willReadFrequently: true })
     if (ctx) {
       ctx.fillStyle = "#ffffff"
       ctx.fillRect(0, 0, canvas.width, canvas.height)
 
-      ctx.fillStyle = "#f4f4f6"
-      ctx.fillRect(16, 16, 488, 88)
+      // Header Banner
+      ctx.fillStyle = "#f5f5f7"
+      ctx.fillRect(20, 20, 500, 110)
 
-      ctx.fillStyle = "#1d1d1f"
-      ctx.font = 'bold 20px "IBM Plex Sans Arabic", -apple-system, sans-serif'
+      ctx.fillStyle = "#111827"
+      ctx.font = 'bold 22px "IBM Plex Sans Arabic", "Segoe UI", Arial, sans-serif'
       ctx.textAlign = "center"
-      ctx.fillText(sample?.store || "TAX INVOICE", 260, 52)
+      ctx.fillText(sample?.store || "TAX INVOICE", 270, 58)
 
-      ctx.font = '13px "IBM Plex Sans Arabic", -apple-system, sans-serif'
-      ctx.fillStyle = "#6e6e73"
-      ctx.fillText(
-        sampleId === "sample-arabic"
-          ? "فاتورة ضريبية مبسطة • الدفع: مدى • الرقم: SA-908124"
-          : sampleId === "sample-saas"
-          ? "Confirmation: 4074958385 • Payment: Visa"
-          : "Tax Invoice • Payment: Apple Pay",
-        260,
-        80
-      )
+      ctx.font = '13px "IBM Plex Sans Arabic", "Segoe UI", Arial, sans-serif'
+      ctx.fillStyle = "#4b5563"
+      if (sampleId === "sample-arabic") {
+        ctx.fillText("فاتورة ضريبية مبسطة (Simplified Tax Invoice)", 270, 84)
+        ctx.fillText("الرقم الضريبي: 300012345678903  •  التاريخ: 2024-03-15", 270, 108)
+      } else if (sampleId === "sample-saas") {
+        ctx.fillText("Tax Invoice  •  TRN: 100234567800003", 270, 84)
+        ctx.fillText("Date: 2024-02-28  •  Ref: 4074958385", 270, 108)
+      } else {
+        ctx.fillText("Official Tax Invoice  •  Tax ID: 94-8291047", 270, 84)
+        ctx.fillText("Date: 2024-01-20  •  Ref: TH-89241", 270, 108)
+      }
 
-      ctx.strokeStyle = "#d2d2d7"
-      ctx.setLineDash([5, 5])
+      // Divider Line
+      ctx.strokeStyle = "#9ca3af"
+      ctx.lineWidth = 1
+      ctx.setLineDash([4, 4])
       ctx.beginPath()
-      ctx.moveTo(32, 130)
-      ctx.lineTo(488, 130)
+      ctx.moveTo(30, 145)
+      ctx.lineTo(510, 145)
       ctx.stroke()
 
+      // Line Items
       ctx.setLineDash([])
-      ctx.font = '14px "IBM Plex Sans Arabic", -apple-system, sans-serif'
-      ctx.fillStyle = "#1d1d1f"
+      ctx.font = '15px "IBM Plex Sans Arabic", "Segoe UI", Arial, sans-serif'
+      ctx.fillStyle = "#111827"
 
       if (sampleId === "sample-arabic") {
         ctx.textAlign = "right"
-        ctx.fillText("بند ١: مجموعة الأجهزة الإلكترونية الأساسية", 488, 175)
+        ctx.fillText("مجموعة الأجهزة الإلكترونية الأساسية", 510, 190)
         ctx.textAlign = "left"
-        ctx.fillText("120.00 SAR", 32, 175)
+        ctx.fillText("120.00 SAR", 30, 190)
 
         ctx.textAlign = "right"
-        ctx.fillText("بند ٢: كابل بيانات عالي السرعة", 488, 225)
+        ctx.fillText("كابل بيانات عالي السرعة", 510, 240)
         ctx.textAlign = "left"
-        ctx.fillText("110.00 SAR", 32, 225)
+        ctx.fillText("110.00 SAR", 30, 240)
+
+        // Totals Divider
+        ctx.setLineDash([4, 4])
+        ctx.beginPath()
+        ctx.moveTo(30, 280)
+        ctx.lineTo(510, 280)
+        ctx.stroke()
+
+        ctx.setLineDash([])
+        ctx.textAlign = "right"
+        ctx.fillText("المجموع الفرعي (Subtotal)", 510, 320)
+        ctx.textAlign = "left"
+        ctx.fillText("230.00 SAR", 30, 320)
 
         ctx.textAlign = "right"
-        ctx.fillText("ضريبة القيمة المضافة (١٥٪)", 488, 275)
+        ctx.fillText("ضريبة القيمة المضافة (15% VAT)", 510, 365)
         ctx.textAlign = "left"
-        ctx.fillText("34.50 SAR", 32, 275)
+        ctx.fillText("34.50 SAR", 30, 365)
       } else if (sampleId === "sample-saas") {
         ctx.textAlign = "left"
-        ctx.fillText("masaravenue.com Domain Renewal", 32, 175)
+        ctx.fillText("masaravenue.com Domain Renewal", 30, 190)
         ctx.textAlign = "right"
-        ctx.fillText("78.51 AED", 488, 175)
+        ctx.fillText("78.51 AED", 510, 190)
 
         ctx.textAlign = "left"
-        ctx.fillText("Cloud Workspace Pro (Quarterly)", 32, 225)
+        ctx.fillText("Cloud Workspace Pro (Quarterly)", 30, 240)
         ctx.textAlign = "right"
-        ctx.fillText("99.00 AED", 488, 225)
+        ctx.fillText("99.00 AED", 510, 240)
+
+        // Totals Divider
+        ctx.setLineDash([4, 4])
+        ctx.beginPath()
+        ctx.moveTo(30, 280)
+        ctx.lineTo(510, 280)
+        ctx.stroke()
+
+        ctx.setLineDash([])
+        ctx.textAlign = "left"
+        ctx.fillText("Subtotal", 30, 320)
+        ctx.textAlign = "right"
+        ctx.fillText("177.51 AED", 510, 320)
 
         ctx.textAlign = "left"
-        ctx.fillText("VAT & Taxes (5%)", 32, 275)
+        ctx.fillText("VAT & Taxes (15%)", 30, 365)
         ctx.textAlign = "right"
-        ctx.fillText("27.47 AED", 488, 275)
+        ctx.fillText("27.47 AED", 510, 365)
       } else {
         ctx.textAlign = "left"
-        ctx.fillText("Item 1: Tech Hardware Accessory", 32, 175)
+        ctx.fillText("Tech Hardware Accessory", 30, 190)
         ctx.textAlign = "right"
-        ctx.fillText("$45.00", 488, 175)
+        ctx.fillText("$45.00", 510, 190)
 
         ctx.textAlign = "left"
-        ctx.fillText("Item 2: High-Speed Cable", 32, 225)
+        ctx.fillText("High-Speed Cable", 30, 240)
         ctx.textAlign = "right"
-        ctx.fillText("$37.49", 488, 225)
+        ctx.fillText("$37.49", 510, 240)
+
+        // Totals Divider
+        ctx.setLineDash([4, 4])
+        ctx.beginPath()
+        ctx.moveTo(30, 280)
+        ctx.lineTo(510, 280)
+        ctx.stroke()
+
+        ctx.setLineDash([])
+        ctx.textAlign = "left"
+        ctx.fillText("Subtotal", 30, 320)
+        ctx.textAlign = "right"
+        ctx.fillText("$82.49", 510, 320)
 
         ctx.textAlign = "left"
-        ctx.fillText("Sales Tax", 32, 275)
+        ctx.fillText("Sales Tax (15%)", 30, 365)
         ctx.textAlign = "right"
-        ctx.fillText("$12.37", 488, 275)
+        ctx.fillText("$12.37", 510, 365)
       }
 
-      ctx.strokeStyle = "#d2d2d7"
-      ctx.setLineDash([5, 5])
+      // Solid Divider
+      ctx.setLineDash([])
+      ctx.strokeStyle = "#111827"
+      ctx.lineWidth = 1.5
       ctx.beginPath()
-      ctx.moveTo(32, 320)
-      ctx.lineTo(488, 320)
+      ctx.moveTo(30, 410)
+      ctx.lineTo(510, 410)
       ctx.stroke()
 
-      ctx.setLineDash([])
-      ctx.font = 'bold 18px "IBM Plex Sans Arabic", -apple-system, sans-serif'
+      // Grand Total
+      ctx.font = 'bold 20px "IBM Plex Sans Arabic", "Segoe UI", Arial, sans-serif'
       ctx.fillStyle = "#0071e3"
       if (sampleId === "sample-arabic") {
         ctx.textAlign = "right"
-        ctx.fillText("الإجمالي المستحق", 488, 370)
+        ctx.fillText("الإجمالي المستحق (Total)", 510, 455)
         ctx.textAlign = "left"
-        ctx.fillText(sample?.total || "264.50 SAR", 32, 370)
+        ctx.fillText(sample?.total || "264.50 SAR", 30, 455)
       } else {
         ctx.textAlign = "left"
-        ctx.fillText("Grand Total", 32, 370)
+        ctx.fillText("Grand Total", 30, 455)
         ctx.textAlign = "right"
-        ctx.fillText(sample?.total || "0.00", 488, 370)
+        ctx.fillText(sample?.total || "0.00", 510, 455)
       }
+
+      // Footer QR / Barcode indicator
+      ctx.fillStyle = "#e5e7eb"
+      ctx.fillRect(220, 500, 100, 100)
+      ctx.fillStyle = "#374151"
+      ctx.font = '11px "IBM Plex Sans Arabic", "Segoe UI", Arial, sans-serif'
+      ctx.textAlign = "center"
+      ctx.fillText("[ ZATCA QR CODE ]", 270, 555)
+
+      ctx.fillStyle = "#9ca3af"
+      ctx.font = '12px "IBM Plex Sans Arabic", "Segoe UI", Arial, sans-serif'
+      ctx.fillText("Thank you for your business!", 270, 640)
 
       setImagePreview(canvas.toDataURL("image/png"))
       setResult(null)

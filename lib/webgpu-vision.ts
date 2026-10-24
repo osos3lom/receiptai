@@ -305,16 +305,39 @@ export async function initVisionModel(
       }
     }
 
-    // Load fine-tuned WebGPU vision model and processor (SmolVLM-256M in q4f16)
+    // Load fine-tuned vision model and processor (SmolVLM-256M in q4f16)
     const processor = await AutoProcessor.from_pretrained("receipt-ai-webgpu", {
       progress_callback: progressCallback,
     })
 
-    const model = await AutoModelForVision2Seq.from_pretrained("receipt-ai-webgpu", {
-      dtype: "q4f16",
-      device: currentBackend,
-      progress_callback: progressCallback,
-    })
+    let model: any = null
+    try {
+      model = await AutoModelForVision2Seq.from_pretrained("receipt-ai-webgpu", {
+        dtype: "q4f16",
+        device: currentBackend,
+        progress_callback: progressCallback,
+      })
+    } catch (modelErr) {
+      if (currentBackend === "webgpu") {
+        console.warn("WebGPU model initialization failed, attempting WASM fallback:", modelErr)
+        currentBackend = "wasm"
+        notify({
+          status: "downloading",
+          progress: 50,
+          downloadedMB: 0,
+          totalMB: 0,
+          backend: "wasm",
+          message: "WebGPU unavailable, switching to WebAssembly...",
+        })
+        model = await AutoModelForVision2Seq.from_pretrained("receipt-ai-webgpu", {
+          dtype: "q4f16",
+          device: "wasm",
+          progress_callback: progressCallback,
+        })
+      } else {
+        throw modelErr
+      }
+    }
 
     const engine: VisionEngineInstance = {
       processor,
@@ -425,8 +448,9 @@ export async function extractReceiptData(
         )
       }
 
+      const detail = e instanceof Error ? e.message : String(e)
       throw new InferenceUnavailableError(
-        "The vision model failed while reading this image. Nothing was extracted."
+        `The vision model failed while reading this image (${detail}). Nothing was extracted.`
       )
     }
   } else if (activeEngine?.isMock) {

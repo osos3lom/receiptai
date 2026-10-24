@@ -30,7 +30,7 @@
     "single_word": false
   },
   "eos_token": {
-    "content": "<|im_end|>",
+    "content": "<end_of_utterance>",
     "lstrip": false,
     "normalized": false,
     "rstrip": false,
