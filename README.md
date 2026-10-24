@@ -14,7 +14,7 @@ A private, client-side receipt and invoice data extractor powered by WebGPU and 
 
 - **🚀 WebGPU Hardware Acceleration**: Runs AI vision inference locally inside your browser with automatic CPU/WASM fallback.
 - **🔒 100% Private**: Your receipt photos and financial documents never leave your browser or device.
-- **💾 Browser Storage Caching**: Model weights (~48 MB) are cached locally in the browser Cache API / IndexedDB. Repeat visits initialize immediately without re-downloading.
+- **💾 Browser Storage Caching**: Model weights are cached locally in the browser Cache API / IndexedDB, so repeat visits initialize without re-downloading. Download size depends on the model and quantization currently configured in `lib/webgpu-vision.ts`; the UI reports the real byte count as it downloads.
 - **📄 Interactive 3-Step Demo**:
   1. **Download & Start Model**: Real-time download progress bar and WebGPU shader pre-warming.
   2. **Upload Receipt**: Drag & drop, camera capture, file upload, or 1-click test samples (Arabic & English tax invoices).

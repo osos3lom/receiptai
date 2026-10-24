@@ -124,7 +124,7 @@ export default function ReceiptDemo() {
     status: "idle",
     progress: 0,
     downloadedMB: 0,
-    totalMB: 48,
+    totalMB: 185,
     backend: "none",
   })
   const [modelInstance, setModelInstance] = useState<any>(null)
@@ -138,6 +138,7 @@ export default function ReceiptDemo() {
 
   // Step 3: Inference, Reviewer & Side-by-Side state
   const [isExtracting, setIsExtracting] = useState<boolean>(false)
+  const [extractError, setExtractError] = useState<string | null>(null)
   const [result, setResult] = useState<InferenceResult | null>(null)
   const [editedReceipt, setEditedReceipt] = useState<ParsedReceipt | null>(null)
   const [imageZoom, setImageZoom] = useState<number>(1)
@@ -221,8 +222,8 @@ export default function ReceiptDemo() {
           setModelState({
             status: "ready",
             progress: 100,
-            downloadedMB: 48,
-            totalMB: 48,
+            downloadedMB: 185,
+            totalMB: 185,
             backend: cachedModel.backend || (gpuOk ? "webgpu" : "wasm"),
           })
           setIsCached(true)
@@ -268,7 +269,7 @@ export default function ReceiptDemo() {
       status: "idle",
       progress: 0,
       downloadedMB: 0,
-      totalMB: 48,
+      totalMB: 185,
       backend: "none",
     })
     setDownloadNotice(t.purged)
@@ -419,11 +420,12 @@ export default function ReceiptDemo() {
     if (!imagePreview) return
     setIsExtracting(true)
 
+    setExtractError(null)
+
     try {
-      const extraction = await extractReceiptData(
-        selectedSampleId ? selectedSampleId : imagePreview,
-        modelInstance
-      )
+      // Always pass the actual image data. Passing the sample's string id used to route
+      // into a hardcoded text fallback, so sample receipts never reached the model.
+      const extraction = await extractReceiptData(imagePreview, modelInstance)
       setResult(extraction)
       setEditedReceipt({ ...extraction.parsed })
 
@@ -435,8 +437,18 @@ export default function ReceiptDemo() {
       const updatedHistory = [newHistoryItem, ...history.slice(0, 9)]
       setHistory(updatedHistory)
       safeSetStorage("receipt_ai_history", JSON.stringify(updatedHistory), "local")
-    } catch {
-      // Extraction error handled silently
+    } catch (err) {
+      // Surface the failure. Silently swallowing it left the previous result on screen
+      // as though it belonged to the newly uploaded image.
+      setResult(null)
+      setEditedReceipt(null)
+      setExtractError(
+        err instanceof Error
+          ? err.message
+          : isRTL
+            ? "تعذر استخراج البيانات من هذه الصورة."
+            : "Could not extract data from this image."
+      )
     } finally {
       setIsExtracting(false)
     }
@@ -448,13 +460,39 @@ export default function ReceiptDemo() {
     const updated = { ...editedReceipt, [field]: value }
 
     if (field === "subTotal" || field === "vatAmount" || field === "total") {
-      const numTotal = parseFloat(updated.total) || 0
-      const numSub = parseFloat(updated.subTotal) || 0
-      const numVat = parseFloat(updated.vatAmount) || 0
-      const expected = Number((numSub + numVat).toFixed(2))
-      const diff = Number(Math.abs(numTotal - expected).toFixed(2))
-      updated.isMathBalanced = diff <= 0.05
-      updated.mathDifference = diff
+      // The check only means something once all three figures exist.
+      const allPresent = [updated.total, updated.subTotal, updated.vatAmount].every(
+        (v) => String(v ?? "").trim() !== ""
+      )
+      updated.mathCheckable = allPresent
+      if (allPresent) {
+        const numTotal = parseFloat(updated.total) || 0
+        const numSub = parseFloat(updated.subTotal) || 0
+        const numVat = parseFloat(updated.vatAmount) || 0
+        const expected = Number((numSub + numVat).toFixed(2))
+        const diff = Number(Math.abs(numTotal - expected).toFixed(2))
+        updated.isMathBalanced = diff <= 0.05
+        updated.mathDifference = diff
+      } else {
+        updated.isMathBalanced = false
+        updated.mathDifference = 0
+      }
+    }
+
+    // Drop a field from the "not read" list once the user has filled it in.
+    if (updated.missingFields && updated.missingFields.length > 0) {
+      const keyFor: Partial<Record<keyof ParsedReceipt, string>> = {
+        store: "store",
+        date: "date",
+        total: "total",
+        subTotal: "subtotal",
+        vatAmount: "vat_amount",
+        currency: "currency",
+      }
+      const key = keyFor[field]
+      if (key && String(value ?? "").trim() !== "") {
+        updated.missingFields = updated.missingFields.filter((k) => k !== key)
+      }
     }
 
     setEditedReceipt(updated)
@@ -1011,6 +1049,15 @@ export default function ReceiptDemo() {
                   </Button>
                 </div>
               )}
+
+              {extractError && (
+                <div
+                  role="alert"
+                  className="p-4 rounded-xl bg-destructive/10 border border-destructive/20 text-sm text-destructive font-bold"
+                >
+                  {extractError}
+                </div>
+              )}
             </>
           )}
         </section>
@@ -1025,7 +1072,12 @@ export default function ReceiptDemo() {
                 <h2 className="text-sm sm:text-base font-bold text-foreground">{t.step3Title}</h2>
 
                 {/* Math Reconciliation Pill */}
-                {editedReceipt.isMathBalanced ? (
+                {editedReceipt.mathCheckable === false ? (
+                  <Badge variant="outline" className="gap-1.5 text-xs sm:text-sm font-bold py-1 px-3 text-muted-foreground">
+                    <AlertCircle className="w-4 h-4 stroke-[2.5]" />
+                    {t.mathUnverified}
+                  </Badge>
+                ) : editedReceipt.isMathBalanced ? (
                   <Badge className="bg-success/15 text-success border-success/30 gap-1.5 text-xs sm:text-sm font-bold py-1 px-3">
                     <Check className="w-4 h-4 stroke-[2.5]" />
                     {t.mathReconciled}
@@ -1180,8 +1232,21 @@ export default function ReceiptDemo() {
                   mobileAuditTab === "data" ? "block" : "hidden lg:block"
                 }`}
               >
-                {/* Auto Reconcile Alert */}
-                {!editedReceipt.isMathBalanced && (
+                {/* Fields the model did not return stay blank; say so instead of implying a reading */}
+                {editedReceipt.missingFields && editedReceipt.missingFields.length > 0 && (
+                  <div
+                    role="status"
+                    className="p-3 rounded-xl bg-warning/10 border border-warning/30 flex items-start gap-1.5 text-xs"
+                  >
+                    <AlertCircle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
+                    <span className="text-foreground font-medium">
+                      {t.fieldsNotFound} {editedReceipt.missingFields.join(", ")}
+                    </span>
+                  </div>
+                )}
+
+                {/* Auto Reconcile Alert: only when all three figures were read and disagree */}
+                {editedReceipt.mathCheckable !== false && !editedReceipt.isMathBalanced && (
                   <div className="p-3 rounded-xl bg-warning/10 border border-warning/30 flex items-center justify-between gap-2 text-xs">
                     <span className="text-foreground font-medium flex items-center gap-1.5">
                       <AlertCircle className="w-4 h-4 text-warning shrink-0" />

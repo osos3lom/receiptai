@@ -26,7 +26,12 @@ export interface ParsedReceipt {
   lineItems: Array<{ description: string; amount: string }>
   isMathBalanced: boolean
   mathDifference: number
-  confidence: {
+  /** False when subtotal, VAT amount and total were not all read, so the check cannot run. */
+  mathCheckable?: boolean
+  /** Fields the model did not return. They stay empty rather than being defaulted. */
+  missingFields?: string[]
+  /** Present only for the OCR-text heuristic path. Model-JSON results carry none. */
+  confidence?: {
     overall: number
     store: number
     date: number
@@ -84,8 +89,181 @@ export function detectExpenseCategory(text: string, store: string): ExpenseCateg
   return "General Business Expense"
 }
 
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v)
+}
+
+/** A non-empty trimmed string, or "" when the model returned nothing usable. */
+function fieldText(v: unknown): string {
+  return typeof v === "string" ? v.trim() : ""
+}
+
+/** A plain decimal string, or "" when absent or malformed. Never defaults to "0.00". */
+function fieldNumber(v: unknown): string {
+  if (typeof v === "number") return Number.isFinite(v) ? String(v) : ""
+  if (typeof v !== "string") return ""
+  const t = normalizeDigits(v).replace(/,/g, "").trim()
+  return /^-?\d+(\.\d+)?$/.test(t) ? t : ""
+}
+
+/**
+ * Pulls the first JSON object out of model text, recovering one cut off by the token
+ * limit. A long line_items array can exhaust max_new_tokens and leave unbalanced
+ * brackets, but the scalar fields are complete well before that point, so rewind to the
+ * last complete pair and close the open containers instead of discarding the read.
+ */
+export function extractModelJson(text: string): Record<string, unknown> | null {
+  const start = text.indexOf("{")
+  if (start < 0) return null
+  const s = text.slice(start)
+
+  const stack: string[] = []
+  const cuts: Array<{ at: number; closers: string }> = []
+  let inString = false
+  let escaped = false
+
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i]
+    if (inString) {
+      if (escaped) escaped = false
+      else if (c === "\\") escaped = true
+      else if (c === '"') inString = false
+      continue
+    }
+    if (c === '"') inString = true
+    else if (c === "{") stack.push("}")
+    else if (c === "[") stack.push("]")
+    else if (c === "}" || c === "]") {
+      stack.pop()
+      if (stack.length === 0) {
+        try {
+          const obj = JSON.parse(s.slice(0, i + 1))
+          return isRecord(obj) ? obj : null
+        } catch {
+          return null
+        }
+      }
+    } else if (c === "," && stack.length > 0) {
+      cuts.push({ at: i, closers: [...stack].reverse().join("") })
+    }
+  }
+
+  for (let k = cuts.length - 1; k >= 0; k--) {
+    try {
+      const obj = JSON.parse(s.slice(0, cuts[k].at) + cuts[k].closers)
+      if (isRecord(obj)) return obj
+    } catch {
+      // try an earlier cut point
+    }
+  }
+  return null
+}
+
+/**
+ * Maps the model's JSON answer onto ParsedReceipt.
+ *
+ * The model is trained to omit fields that are not printed on the receipt. They stay
+ * empty here and are listed in missingFields, so the UI can say "not read" instead of
+ * showing today's date, a made-up merchant, or a 15% VAT that the receipt never stated.
+ * No confidence score is produced: the model emits none, and inventing one would be a
+ * fabricated number presented as a measurement.
+ */
+function parseModelJson(json: Record<string, unknown>, rawText: string): ParsedReceipt | null {
+  const store = fieldText(json.store)
+  const total = fieldNumber(json.total)
+  const taxNumber = fieldText(json.tax_number)
+  // Valid JSON that is not a receipt reading (for example, an echoed prompt).
+  if (!store && !total && !taxNumber) return null
+
+  const date = fieldText(json.date)
+  const subTotal = fieldNumber(json.subtotal)
+  const vatPercent = fieldNumber(json.vat_percent)
+  const vatAmount = fieldNumber(json.vat_amount)
+  const currency = fieldText(json.currency)
+
+  const missingFields = Object.entries({
+    store,
+    date,
+    total,
+    subtotal: subTotal,
+    vat_amount: vatAmount,
+    currency,
+  })
+    .filter(([, value]) => !value)
+    .map(([key]) => key)
+
+  // The reconciliation check needs all three figures. With one missing it cannot run,
+  // and reporting "balanced" or "discrepancy" would both be claims the data cannot back.
+  const mathCheckable = Boolean(subTotal && vatAmount && total)
+  const mathDifference = mathCheckable
+    ? Number(Math.abs(Number(total) - (Number(subTotal) + Number(vatAmount))).toFixed(2))
+    : 0
+
+  const rawItems = Array.isArray(json.line_items) ? json.line_items : []
+  const lineItems = rawItems.flatMap((item): Array<{ description: string; amount: string }> => {
+    if (typeof item === "string") {
+      return item.trim() ? [{ description: item.trim(), amount: "" }] : []
+    }
+    if (!isRecord(item)) return []
+    const description = fieldText(item.description ?? item.name)
+    const amount = fieldNumber(item.amount ?? item.price)
+    return description || amount ? [{ description, amount }] : []
+  })
+
+  return {
+    store,
+    date,
+    referenceNumber: fieldText(json.reference_number) || taxNumber,
+    paymentMethod: fieldText(json.payment_method),
+    category: detectExpenseCategory(rawText, store),
+    subTotal,
+    vatPercent,
+    vatAmount,
+    total,
+    currency,
+    rawText,
+    lineItems,
+    isMathBalanced: mathCheckable && mathDifference <= 0.05,
+    mathDifference,
+    mathCheckable,
+    missingFields,
+  }
+}
+
+/** A receipt with nothing read. Every field is reported as missing for manual entry. */
+function emptyReceipt(rawText: string): ParsedReceipt {
+  return {
+    store: "",
+    date: "",
+    referenceNumber: "",
+    paymentMethod: "",
+    category: "General Business Expense",
+    subTotal: "",
+    vatPercent: "",
+    vatAmount: "",
+    total: "",
+    currency: "",
+    rawText,
+    lineItems: [],
+    isMathBalanced: false,
+    mathDifference: 0,
+    mathCheckable: false,
+    missingFields: ["store", "date", "total", "subtotal", "vat_amount", "currency"],
+  }
+}
+
 /** Parses raw OCR text into structured receipt fields */
 export function parseReceiptText(rawText: string): ParsedReceipt {
+  // The vision model is trained to answer in JSON. Read it directly when it did.
+  const modelJson = extractModelJson(rawText)
+  if (modelJson) {
+    const fromModel = parseModelJson(modelJson, rawText)
+    if (fromModel) return fromModel
+  }
+  // Output that opens like JSON but is not a usable reading must not fall through to the
+  // OCR heuristics, which would take the first line of the JSON text as the merchant name.
+  if (rawText.trimStart().startsWith("{")) return emptyReceipt(rawText)
+
   const normalized = normalizeDigits(rawText)
 
   // 1️⃣ Sub-Total detection
@@ -141,7 +319,8 @@ export function parseReceiptText(rawText: string): ParsedReceipt {
   // 6️⃣ Currency detection (Strict word boundaries to avoid matching substrings like 'sar' in 'masaravenue')
   const currencyRegex = /\b(AED|SAR|USD|EUR|GBP|KWD|QAR|BHD|OMR)\b|(\$|€|£|ر\.س|ريال|درهم)/gi
   const currencyMatches = Array.from(normalized.matchAll(currencyRegex))
-  let currency = "SAR"
+  // No currency symbol on the receipt means unknown, not Saudi riyals.
+  let currency = ""
   if (currencyMatches.length > 0) {
     const lastMatch = currencyMatches[currencyMatches.length - 1][0].toUpperCase()
     if (lastMatch === "$" || lastMatch === "USD") currency = "USD"
@@ -189,21 +368,19 @@ export function parseReceiptText(rawText: string): ParsedReceipt {
       break
     }
   }
-  if (!store) store = "Merchant / Store"
+  // An unread merchant stays empty. A placeholder name would read as a real result.
 
   // 8️⃣ Date detection
   const dateRegex =
     /(\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2}|\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/
   const dateMatch = normalized.match(dateRegex)
-  const date = dateMatch ? dateMatch[1] : new Date().toISOString().split("T")[0]
+  // No date on the receipt means no date, not today's. Defaulting hid the gap.
+  const date = dateMatch ? dateMatch[1] : ""
 
-  // Calculate Subtotal if missing
-  if (!subTotal) {
-    if (total && vatAmount && parseFloat(total) > parseFloat(vatAmount)) {
-      subTotal = (parseFloat(total) - parseFloat(vatAmount)).toFixed(2)
-    } else {
-      subTotal = total
-    }
+  // Derive the subtotal only from two figures that were actually read. Copying the total
+  // into it when no VAT was found asserted a split the receipt never stated.
+  if (!subTotal && total && vatAmount && parseFloat(total) > parseFloat(vatAmount)) {
+    subTotal = (parseFloat(total) - parseFloat(vatAmount)).toFixed(2)
   }
 
   // 9️⃣ Multi-line and Single-line Line Items Parsing
@@ -265,13 +442,14 @@ export function parseReceiptText(rawText: string): ParsedReceipt {
   const numVat = parseFloat(vatAmount) || 0
   const expectedTotal = Number((numSubTotal + numVat).toFixed(2))
   const mathDiff = Number(Math.abs(numTotal - expectedTotal).toFixed(2))
-  const isMathBalanced = mathDiff <= 0.05
+  const mathCheckable = Boolean(subTotal && vatAmount && total)
+  const isMathBalanced = mathCheckable && mathDiff <= 0.05
 
   // 1️⃣1️⃣ Expense Categorization
   const category = detectExpenseCategory(normalized, store)
 
   // 1️⃣2️⃣ Confidence Scores
-  const hasStore = store !== "Merchant / Store"
+  const hasStore = Boolean(store)
   const hasDate = Boolean(dateMatch)
   const hasTotal = Boolean(totalPriorityMatch)
   const hasTax = Boolean(vatMatch)
@@ -297,13 +475,24 @@ export function parseReceiptText(rawText: string): ParsedReceipt {
     category,
     subTotal,
     vatPercent,
-    vatAmount: vatAmount || "0.00",
-    total: total || "0.00",
+    vatAmount,
+    total,
     currency,
     rawText,
     lineItems,
     isMathBalanced,
-    mathDifference: mathDiff,
+    mathDifference: mathCheckable ? mathDiff : 0,
+    mathCheckable,
+    missingFields: Object.entries({
+      store,
+      date,
+      total,
+      subtotal: subTotal,
+      vat_amount: vatAmount,
+      currency,
+    })
+      .filter(([, value]) => !value)
+      .map(([key]) => key),
     confidence,
   }
 }

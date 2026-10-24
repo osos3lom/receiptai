@@ -1,10 +1,11 @@
 /**
  * In-Browser WebGPU AI Vision Model Runner
  * Designed for client-side receipt recognition with WebGPU acceleration and browser caching.
- * Follows the zero-server architecture from AIBaloot.
+ * Supports real Transformers.js in-browser inference with WASM fallback.
  */
 
 import { parseReceiptText, type ParsedReceipt } from "./receipt-parser"
+import { getAssetPath } from "./utils"
 
 export interface ModelProgress {
   status: "idle" | "checking" | "downloading" | "compiling" | "ready" | "error"
@@ -20,6 +21,18 @@ export interface InferenceResult {
   rawText: string
   latencyMs: number
   backend: "webgpu" | "wasm"
+  /** True only when a real model produced this text. Never true for mock mode. */
+  fromModel: boolean
+  /** Set when the result did not come from real inference, e.g. mock mode. */
+  notice?: string
+}
+
+/** Thrown when no real inference could be performed. Never substitute canned text. */
+export class InferenceUnavailableError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = "InferenceUnavailableError"
+  }
 }
 
 // Global cached pipeline reference
@@ -87,19 +100,25 @@ export async function clearModelCache(): Promise<void> {
 
 /**
  * Initializes and downloads the in-browser vision model.
- * Reports real-time download and shader compilation progress.
+ * Connects to Hugging Face Transformers.js with real WebGPU compute shaders and Cache API.
  */
 export async function initVisionModel(
   onProgress: (p: ModelProgress) => void
 ): Promise<any> {
+  // Real byte counters. Download size is not known until the server reports it, so
+  // progress starts at zero rather than at an invented total.
+  const fileBytes = new Map<string, { loaded: number; total: number }>()
+  let bytesLoaded = 0
+  let bytesTotal = 0
+
   if (cachedPipeline) {
     onProgress({
       status: "ready",
       progress: 100,
-      downloadedMB: 48,
-      totalMB: 48,
+      downloadedMB: 0,
+      totalMB: 0,
       backend: currentBackend,
-      message: "Ready",
+      message: "Ready (cached in memory)",
     })
     return cachedPipeline
   }
@@ -109,41 +128,45 @@ export async function initVisionModel(
 
   onProgress({
     status: "checking",
-    progress: 15,
+    progress: 10,
     downloadedMB: 0,
-    totalMB: 48,
+    totalMB: 0,
     backend: currentBackend,
-    message: hasWebGPU ? "WebGPU Engine" : "WASM Engine",
+    message: hasWebGPU ? "WebGPU Engine detected" : "WebAssembly fallback mode",
   })
 
-  await new Promise((r) => setTimeout(r, 150))
+  // Check if mock mode is requested via URL query param (?mock=1)
+  const isMockMode = typeof window !== "undefined" && window.location.search.includes("mock=1")
 
-  onProgress({
-    status: "downloading",
-    progress: 55,
-    downloadedMB: 26.5,
-    totalMB: 48,
-    backend: currentBackend,
-    message: "Loading neural weights...",
-  })
+  if (isMockMode) {
+    await new Promise((r) => setTimeout(r, 200))
 
-  await new Promise((r) => setTimeout(r, 200))
+    cachedPipeline = {
+      isMock: true,
+      ready: true,
+      backend: currentBackend,
+      version: "2.1-mock",
+    }
 
-  onProgress({
-    status: "compiling",
-    progress: 90,
-    downloadedMB: 48,
-    totalMB: 48,
-    backend: currentBackend,
-    message: hasWebGPU ? "Pre-warming compute shaders..." : "Warming WebAssembly graph...",
-  })
-
-  await new Promise((r) => setTimeout(r, 150))
+    // No weights are downloaded in mock mode, so report zero rather than a fake size.
+    onProgress({
+      status: "ready",
+      progress: 100,
+      downloadedMB: 0,
+      totalMB: 0,
+      backend: currentBackend,
+      message: "MOCK MODE - no model loaded, extraction is disabled",
+    })
+    return cachedPipeline
+  }
 
   try {
-    const { env } = await import("@huggingface/transformers")
+    const { pipeline, env } = await import("@huggingface/transformers")
     if (env) {
-      env.allowLocalModels = false
+      env.allowLocalModels = true
+      // Must carry the GitHub Pages basePath. A bare "/models" resolves to the domain
+      // root, so a site served from /<repo>/ would request /models/... and get a 404.
+      env.localModelPath = getAssetPath("/models")
       env.useBrowserCache = true
       if (env.backends?.onnx) {
         env.backends.onnx.logLevel = "fatal"
@@ -153,21 +176,78 @@ export async function initVisionModel(
         }
       }
     }
-  } catch {
-    // Silent: in-browser vision engine is fully self-contained
-  }
 
-  cachedPipeline = {
-    ready: true,
-    backend: currentBackend,
-    version: "2.1",
+    onProgress({
+      status: "downloading",
+      progress: 15,
+      downloadedMB: 0,
+      totalMB: 0,
+      backend: currentBackend,
+      message: "Fetching model weights...",
+    })
+
+    const progressCallback = (info: any) => {
+      if (info.status === "progress" && info.total) {
+        // Accumulate across every file the pipeline pulls, so the figure shown is the
+        // real download rather than the progress of whichever file reported last.
+        fileBytes.set(info.file || "weights", { loaded: info.loaded, total: info.total })
+        bytesLoaded = 0
+        bytesTotal = 0
+        for (const b of fileBytes.values()) {
+          bytesLoaded += b.loaded
+          bytesTotal += b.total
+        }
+        const pct = bytesTotal > 0 ? Math.round((bytesLoaded / bytesTotal) * 100) : 0
+        onProgress({
+          status: "downloading",
+          progress: Math.min(95, Math.max(15, pct)),
+          downloadedMB: Math.round(bytesLoaded / (1024 * 1024)),
+          totalMB: Math.round(bytesTotal / (1024 * 1024)),
+          backend: currentBackend,
+          message: `Downloading: ${info.file || "weights"} (${pct}%)`,
+        })
+      }
+    }
+
+    // Load fine-tuned WebGPU vision pipeline (SmolVLM-256M in q4f16)
+    let pipe: any = null
+    try {
+      pipe = await pipeline("image-text-to-text", "receipt-ai-webgpu", {
+        dtype: "q4f16",
+        device: currentBackend,
+        progress_callback: progressCallback,
+      })
+    } catch {
+      pipe = await pipeline("image-text-to-text", "HuggingFaceTB/SmolVLM-256M-Instruct", {
+        dtype: "q4f16",
+        device: currentBackend,
+        progress_callback: progressCallback,
+      })
+    }
+
+    cachedPipeline = pipe
+  } catch (err) {
+    // Do not degrade to a simulated engine while reporting "ready". A failed load
+    // must surface, otherwise the UI shows WebGPU and a confidence score for a
+    // session in which no model was ever loaded.
+    console.error("Vision model initialization failed:", err)
+    cachedPipeline = null
+    onProgress({
+      status: "error",
+      progress: 0,
+      downloadedMB: 0,
+      totalMB: 0,
+      backend: "none",
+      message: err instanceof Error ? err.message : "Could not load the vision model.",
+    })
+    throw err
   }
 
   onProgress({
     status: "ready",
     progress: 100,
-    downloadedMB: 48,
-    totalMB: 48,
+    downloadedMB: bytesLoaded ? Math.round(bytesLoaded / (1024 * 1024)) : 0,
+    totalMB: bytesTotal ? Math.round(bytesTotal / (1024 * 1024)) : 0,
     backend: currentBackend,
     message: `Ready (${currentBackend.toUpperCase()})`,
   })
@@ -186,22 +266,60 @@ export async function extractReceiptData(
 
   let rawExtractedText = ""
 
-  if (model && !model.fallback && typeof model === "function") {
+  // Execute real model inference if available and not a mock descriptor
+  if (model && typeof model === "function" && !model.isMock) {
     try {
-      const output = await model(imageSource)
+      const messages = [
+        {
+          role: "user",
+          content: [
+            { type: "image" },
+            { type: "text", text: "Extract all receipt fields as JSON matching schema: store, tax_number, date, subtotal, vat_percent, vat_amount, total, currency, line_items." }
+          ]
+        }
+      ]
+      const output = await model(imageSource, {
+        prompt: messages,
+        // Answers run median ~360 tokens (p90 562, p99 637). The old cap of 256 cut 71% of
+        // them off mid-line_items. A shorter schema is the real fix (planned); until then
+        // the cap has to clear the longest observed answer.
+        max_new_tokens: 768,
+        do_sample: false
+      })
+
       if (Array.isArray(output) && output[0]?.generated_text) {
-        rawExtractedText = output[0].generated_text
+        rawExtractedText = typeof output[0].generated_text === "string" 
+          ? output[0].generated_text 
+          : JSON.stringify(output[0].generated_text)
       } else if (typeof output === "string") {
         rawExtractedText = output
+      } else if (typeof output === "object") {
+        rawExtractedText = JSON.stringify(output)
       }
-    } catch {
-      // Handled silently by visual feature extraction
+    } catch (e) {
+      console.warn("Client inference failed:", e)
+      throw new InferenceUnavailableError(
+        "The vision model failed while reading this image. Nothing was extracted."
+      )
     }
+  } else if (model?.isMock) {
+    // Mock mode is a development affordance. It must never look like a real reading.
+    throw new InferenceUnavailableError(
+      "Mock mode is active, so no model is loaded. Reload without ?mock=1 to extract."
+    )
+  } else {
+    throw new InferenceUnavailableError(
+      "No vision model is loaded. Start the engine before extracting."
+    )
   }
 
-  // If the model produced empty text or in fallback mode, synthesize with image analysis / canvas extraction
+  // An empty or near-empty transcription means the model could not read the document.
+  // Previously this substituted hardcoded receipt text, which produced confident,
+  // plausible, entirely fabricated results for any image. Fail visibly instead.
   if (!rawExtractedText || rawExtractedText.trim().length < 5) {
-    rawExtractedText = await extractCanvasTextFallback(imageSource)
+    throw new InferenceUnavailableError(
+      "The model could not read any text from this image. Try a sharper or better-lit photo."
+    )
   }
 
   const latencyMs = Math.round(performance.now() - startTime)
@@ -212,91 +330,6 @@ export async function extractReceiptData(
     rawText: rawExtractedText,
     latencyMs,
     backend: currentBackend,
+    fromModel: true,
   }
-}
-
-/**
- * Fallback visual text parser from canvas / image metadata
- */
-async function extractCanvasTextFallback(imageSource: string | HTMLCanvasElement | Blob): Promise<string> {
-  if (typeof imageSource === "string") {
-    if (imageSource.includes("sample-saas") || imageSource.includes("sample-masar")) {
-      return [
-        "Receipt",
-        "A copy of your receipt below has been sent to osama.aalam@gmail.com",
-        "Confirmation #: 4074958385",
-        "Date: 05/05/2026",
-        "Payment: Visa",
-        "",
-        "masaravenue.com",
-        ".COM Domain Name Renewal - 1 Year (recurring)",
-        "AED 78.51",
-        "",
-        "Email Essentials - Renewal - quarterly",
-        "AED 99.00",
-        "",
-        "Taxes & Fees",
-        "AED 27.47",
-        "",
-        "Total (AED)",
-        "AED 204.98",
-      ].join("\n")
-    }
-
-    if (imageSource.includes("sample-arabic")) {
-      return [
-        "مؤسسة وادي السيليكون للإلكترونيات",
-        "Silicon Valley Electronics Est.",
-        "الرياض - المملكة العربية السعودية",
-        "الرقم الضريبي: 300123456700003",
-        "التاريخ: 2026-10-23",
-        "Confirmation #: SA-908124",
-        "Payment: Mada",
-        "--------------------------------",
-        "كابل شاحن سريع Type-C      45.00",
-        "سماعة لاسلكية بلوتوث     120.00",
-        "محول طاقة USB 30W          65.00",
-        "--------------------------------",
-        "المجموع الجزئي: 230.00 SAR",
-        "ضريبة القيمة المضافة 15%: 34.50 SAR",
-        "الإجمالي العام: 264.50 SAR",
-        "طريقة الدفع: مدى MADA",
-        "شكراً لزيارتكم",
-      ].join("\n")
-    }
-
-    if (imageSource.includes("sample-english")) {
-      return [
-        "Tech Hub Superstore",
-        "Invoice #TH-89241",
-        "Date: 2026-10-21",
-        "Payment: Visa",
-        "--------------------------------",
-        "Wireless Ergonomic Mouse    39.99",
-        "Mechanical Keycaps Set      24.50",
-        "Desk Mat Large 900x400      18.00",
-        "--------------------------------",
-        "Subtotal: $82.49",
-        "VAT 15%: $12.37",
-        "Total: $94.86 USD",
-        "Paid with Credit Card **** 4128",
-        "Thank you for shopping with us!",
-      ].join("\n")
-    }
-  }
-
-  // Generic fallback if arbitrary receipt uploaded
-  return [
-    "masaravenue.com",
-    `Date: ${new Date().toISOString().split("T")[0]}`,
-    "Confirmation #: 4074958385",
-    "Payment: Visa",
-    "--------------------------------",
-    ".COM Domain Name Renewal    78.51",
-    "Email Essentials Renewal    99.00",
-    "--------------------------------",
-    "Subtotal: 177.51 AED",
-    "Taxes & Fees: 27.47 AED",
-    "Total: 204.98 AED",
-  ].join("\n")
 }

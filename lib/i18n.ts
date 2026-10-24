@@ -38,6 +38,8 @@ export interface TranslationDictionary {
   step3Tip: string
   mathReconciled: string
   mathDiff: string
+  mathUnverified: string
+  fieldsNotFound: string
   reconcileTip: string
   autoReconcile: string
   confidence: string
@@ -103,7 +105,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     wasmFallback: "WASM",
     wasmTip: "يعمل عبر معالج المتصفح (WebAssembly).",
     purgeCache: "مسح الذاكرة",
-    purgeTip: "حذف النموذج المخزن مؤقتاً (~٤٨ م.ب).",
+    purgeTip: "حذف النموذج المخزن مؤقتاً (~١٨٥ م.ب).",
     purged: "تم مسح الذاكرة",
     privacyBadge: "خصوصية ١٠٠٪",
     privacyTip: "جميع الفحوصات تتم داخل جهازك فقط.",
@@ -111,7 +113,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     step1Title: "المحرك",
     step1Tip: "يتم تشغيل النموذج في المتصفح للعمل بدون إنترنت.",
     loadFromCache: "بدء المحرك",
-    downloadAndStart: "بدء المحرك (~٤٨ م.ب)",
+    downloadAndStart: "بدء المحرك (~١٨٥ م.ب)",
     readyInMemory: "جاهز",
     retrying: "إعادة المحاولة...",
     retry: "إعادة المحاولة",
@@ -130,6 +132,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     step3Tip: "مقارنة الحقول المستخرجة وتدقيق الضريبة.",
     mathReconciled: "متطابق ضريبياً",
     mathDiff: "فارق حسابي",
+    mathUnverified: "تعذّر التحقق الحسابي",
+    fieldsNotFound: "لم تُقرأ هذه الحقول من الإيصال، أدخلها يدوياً:",
     reconcileTip: "المجموع الفرعي + الضريبة = الإجمالي.",
     autoReconcile: "مطابقة",
     confidence: "الدقة",
@@ -186,7 +190,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     wasmFallback: "WASM",
     wasmTip: "Running on browser CPU mode.",
     purgeCache: "Purge Cache",
-    purgeTip: "Delete cached AI weights (~48 MB).",
+    purgeTip: "Delete cached AI weights (~185 MB).",
     purged: "Cache cleared",
     privacyBadge: "100% Private",
     privacyTip: "All OCR and parsing happens on your device only.",
@@ -194,7 +198,7 @@ export const translations: Record<Language, TranslationDictionary> = {
     step1Title: "AI Engine",
     step1Tip: "Downloads model to browser storage for instant offline access.",
     loadFromCache: "Start Engine",
-    downloadAndStart: "Start Engine (~48 MB)",
+    downloadAndStart: "Start Engine (~185 MB)",
     readyInMemory: "Ready",
     retrying: "Retrying...",
     retry: "Retry",
@@ -213,6 +217,8 @@ export const translations: Record<Language, TranslationDictionary> = {
     step3Tip: "Validate extracted fields and tax math.",
     mathReconciled: "Matched",
     mathDiff: "Diff",
+    mathUnverified: "Can't verify math",
+    fieldsNotFound: "Not read from this receipt, enter manually:",
     reconcileTip: "Subtotal + VAT = Grand Total.",
     autoReconcile: "Auto-Match",
     confidence: "Confidence",
