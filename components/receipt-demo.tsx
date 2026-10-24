@@ -55,6 +55,9 @@ import {
   initVisionModel,
   extractReceiptData,
   InferenceUnavailableError,
+  HF_MODEL_URL,
+  HF_MODEL_REPO,
+  MODEL_TOTAL_MB,
   type ModelProgress,
   type InferenceResult,
 } from "@/lib/webgpu-vision"
@@ -125,7 +128,7 @@ export default function ReceiptDemo() {
     status: "idle",
     progress: 0,
     downloadedMB: 0,
-    totalMB: 185,
+    totalMB: MODEL_TOTAL_MB,
     backend: "none",
   })
   const [modelInstance, setModelInstance] = useState<any>(null)
@@ -225,8 +228,8 @@ export default function ReceiptDemo() {
           setModelState({
             status: "ready",
             progress: 100,
-            downloadedMB: 185,
-            totalMB: 185,
+            downloadedMB: MODEL_TOTAL_MB,
+            totalMB: MODEL_TOTAL_MB,
             backend: cachedModel.backend || (gpuOk ? "webgpu" : "wasm"),
           })
           setIsCached(true)
@@ -244,12 +247,12 @@ export default function ReceiptDemo() {
     }
   }, [result])
 
-  // Step 1 Handler: Download and initialize model
+  // Step 1 Handler: Download and initialize model from Hugging Face
   const handleStartModel = async () => {
     try {
       const model = await initVisionModel((progress) => {
         setModelState(progress)
-      })
+      }, HF_MODEL_URL)
       modelRef.current = model
       setModelInstance(() => model)
       setIsCached(true)
@@ -258,7 +261,7 @@ export default function ReceiptDemo() {
       setModelState((prev) => ({
         ...prev,
         status: "error",
-        message: isRTL ? "تعذر تشغيل المحرك" : "Failed to start model",
+        message: isRTL ? "تعذر تشغيل المحرك من Hugging Face" : "Failed to start model from Hugging Face",
       }))
     }
   }
@@ -274,7 +277,7 @@ export default function ReceiptDemo() {
       status: "idle",
       progress: 0,
       downloadedMB: 0,
-      totalMB: 185,
+      totalMB: MODEL_TOTAL_MB,
       backend: "none",
     })
     setDownloadNotice(t.purged)
@@ -525,7 +528,7 @@ export default function ReceiptDemo() {
           status: "idle",
           progress: 0,
           downloadedMB: 0,
-          totalMB: 185,
+          totalMB: MODEL_TOTAL_MB,
           backend: "none",
         })
       }
@@ -913,9 +916,22 @@ export default function ReceiptDemo() {
                     </span>
                   )}
                 </h2>
-                <span className="text-xs text-muted-foreground hidden sm:block">
-                  {lang === "ar" ? "WebGPU • محلي ١٠٠٪" : "WebGPU • 100% Private"}
-                </span>
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span className="hidden sm:inline">
+                    {lang === "ar" ? "WebGPU • محلي ١٠٠٪" : "WebGPU • 100% Private"}
+                  </span>
+                  <span className="hidden sm:inline text-muted-foreground/40">•</span>
+                  <a
+                    href={HF_MODEL_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-primary hover:underline font-mono"
+                    title={lang === "ar" ? "عرض النموذج على Hugging Face" : "View model on Hugging Face"}
+                  >
+                    <span>{HF_MODEL_REPO}</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
               </div>
               <InfoTip content={t.step1Tip} />
             </div>
@@ -930,9 +946,20 @@ export default function ReceiptDemo() {
 
           {modelState.status === "idle" && !modelInstance && (
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-4 sm:p-5 rounded-2xl bg-secondary/30 border border-border/70">
-              <div className="flex items-center gap-2.5 text-sm font-bold text-muted-foreground">
-                <Zap className="w-5 h-5 text-primary" />
-                <span className="font-mono text-foreground text-sm sm:text-base">{webGpuAvailable ? "WebGPU Engine" : "WASM Engine"}</span>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 text-sm font-bold text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <Zap className="w-5 h-5 text-primary" />
+                  <span className="font-mono text-foreground text-sm sm:text-base">{webGpuAvailable ? "WebGPU Engine" : "WASM Engine"}</span>
+                </div>
+                <a
+                  href={HF_MODEL_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-normal text-muted-foreground hover:text-foreground flex items-center gap-1 font-mono transition-colors"
+                >
+                  <span>Hugging Face ({HF_MODEL_REPO})</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
               </div>
               <Button onClick={handleStartModel} className="rounded-2xl h-14 sm:h-16 px-6 text-base sm:text-lg font-extrabold gap-2.5 w-full sm:w-auto min-h-[56px] shadow-sm active:scale-95">
                 <Download className="w-5 h-5 sm:w-6 sm:h-6" />

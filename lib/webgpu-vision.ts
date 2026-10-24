@@ -1,11 +1,16 @@
 /**
  * In-Browser WebGPU AI Vision Model Runner
  * Designed for client-side receipt recognition with WebGPU acceleration and browser caching.
+ * Downloads the fine-tuned vision model from Hugging Face Hub: https://huggingface.co/osos3lom/receiptai
  * Uses AutoProcessor + AutoModelForVision2Seq for SmolVLM / Idefics3 architecture.
  */
 
 import { parseReceiptText, type ParsedReceipt } from "./receipt-parser"
 import { getAssetPath } from "./utils"
+
+export const HF_MODEL_URL = "https://huggingface.co/osos3lom/receiptai"
+export const HF_MODEL_REPO = "osos3lom/receiptai"
+export const MODEL_TOTAL_MB = 189
 
 export interface ModelProgress {
   status: "idle" | "checking" | "downloading" | "compiling" | "ready" | "error"
@@ -114,7 +119,13 @@ export async function isModelCachedInBrowser(): Promise<boolean> {
   try {
     const keys = await window.caches.keys()
     for (const key of keys) {
-      if (key.includes("transformers") || key.includes("onnx") || key.includes("receipt-ai")) {
+      if (
+        key.includes("transformers") ||
+        key.includes("onnx") ||
+        key.includes("receipt-ai") ||
+        key.includes("receiptai") ||
+        key.includes("osos3lom")
+      ) {
         const cache = await window.caches.open(key)
         const requests = await cache.keys()
         if (requests.length > 0) return true
@@ -134,7 +145,14 @@ export async function clearModelCache(): Promise<void> {
     const keys = await window.caches.keys()
     await Promise.all(
       keys
-        .filter((k) => k.includes("transformers") || k.includes("onnx") || k.includes("receipt-ai"))
+        .filter(
+          (k) =>
+            k.includes("transformers") ||
+            k.includes("onnx") ||
+            k.includes("receipt-ai") ||
+            k.includes("receiptai") ||
+            k.includes("osos3lom")
+        )
         .map((k) => window.caches.delete(k).catch(() => false))
     )
   } catch {
@@ -197,12 +215,21 @@ async function toRawImage(RawImage: any, input: string | HTMLCanvasElement | Blo
 }
 
 /**
- * Initializes and downloads the in-browser vision model.
+ * Resolves a model repository string from a URL or repo ID
+ */
+export function resolveModelRepo(source: string = HF_MODEL_REPO): string {
+  return source.replace(/^https?:\/\/huggingface\.co\//i, "").replace(/\/+$/, "")
+}
+
+/**
+ * Initializes and downloads the in-browser vision model from Hugging Face Hub.
  * Connects to Hugging Face Transformers.js with real WebGPU compute shaders and Cache API.
  */
 export async function initVisionModel(
-  onProgress?: (p: ModelProgress) => void
+  onProgress?: (p: ModelProgress) => void,
+  modelSource: string = HF_MODEL_REPO
 ): Promise<VisionEngineInstance> {
+  const repoId = resolveModelRepo(modelSource)
   const notify = onProgress || (() => {})
   const fileBytes = new Map<string, { loaded: number; total: number }>()
   let bytesLoaded = 0
@@ -227,7 +254,7 @@ export async function initVisionModel(
     status: "checking",
     progress: 10,
     downloadedMB: 0,
-    totalMB: 0,
+    totalMB: MODEL_TOTAL_MB,
     backend: currentBackend,
     message: hasWebGPU ? "WebGPU Engine detected" : "WebAssembly fallback mode",
   })
@@ -262,9 +289,8 @@ export async function initVisionModel(
     const lib = await loadTransformersLibrary()
     const { AutoProcessor, AutoModelForVision2Seq, RawImage, env } = lib
     if (env) {
-      env.allowLocalModels = true
-      // Must carry the GitHub Pages basePath so the site can resolve local models
-      env.localModelPath = getAssetPath("/models")
+      env.allowRemoteModels = true
+      env.allowLocalModels = false
       env.useBrowserCache = true
       if (env.backends?.onnx) {
         env.backends.onnx.logLevel = "fatal"
@@ -279,9 +305,9 @@ export async function initVisionModel(
       status: "downloading",
       progress: 15,
       downloadedMB: 0,
-      totalMB: 0,
+      totalMB: MODEL_TOTAL_MB,
       backend: currentBackend,
-      message: "Fetching model weights...",
+      message: `Fetching model weights from Hugging Face (${repoId})...`,
     })
 
     const progressCallback = (info: any) => {
@@ -298,21 +324,21 @@ export async function initVisionModel(
           status: "downloading",
           progress: Math.min(95, Math.max(15, pct)),
           downloadedMB: Math.round(bytesLoaded / (1024 * 1024)),
-          totalMB: Math.round(bytesTotal / (1024 * 1024)),
+          totalMB: Math.round(bytesTotal / (1024 * 1024)) || MODEL_TOTAL_MB,
           backend: currentBackend,
-          message: `Downloading: ${info.file || "weights"} (${pct}%)`,
+          message: `Downloading from Hugging Face: ${info.file || "weights"} (${pct}%)`,
         })
       }
     }
 
-    // Load fine-tuned vision model and processor (SmolVLM-256M in q4f16)
-    const processor = await AutoProcessor.from_pretrained("receipt-ai-webgpu", {
+    // Load fine-tuned vision model and processor from Hugging Face Hub (SmolVLM-256M in q4f16)
+    const processor = await AutoProcessor.from_pretrained(repoId, {
       progress_callback: progressCallback,
     })
 
     let model: any = null
     try {
-      model = await AutoModelForVision2Seq.from_pretrained("receipt-ai-webgpu", {
+      model = await AutoModelForVision2Seq.from_pretrained(repoId, {
         dtype: "q4f16",
         device: currentBackend,
         progress_callback: progressCallback,
@@ -325,11 +351,11 @@ export async function initVisionModel(
           status: "downloading",
           progress: 50,
           downloadedMB: 0,
-          totalMB: 0,
+          totalMB: MODEL_TOTAL_MB,
           backend: "wasm",
           message: "WebGPU unavailable, switching to WebAssembly...",
         })
-        model = await AutoModelForVision2Seq.from_pretrained("receipt-ai-webgpu", {
+        model = await AutoModelForVision2Seq.from_pretrained(repoId, {
           dtype: "q4f16",
           device: "wasm",
           progress_callback: progressCallback,
@@ -358,7 +384,7 @@ export async function initVisionModel(
       downloadedMB: 0,
       totalMB: 0,
       backend: "none",
-      message: err instanceof Error ? err.message : "Could not load the vision model.",
+      message: err instanceof Error ? err.message : "Could not load the vision model from Hugging Face.",
     })
     throw err
   }
@@ -366,8 +392,8 @@ export async function initVisionModel(
   notify({
     status: "ready",
     progress: 100,
-    downloadedMB: bytesLoaded ? Math.round(bytesLoaded / (1024 * 1024)) : 185,
-    totalMB: bytesTotal ? Math.round(bytesTotal / (1024 * 1024)) : 185,
+    downloadedMB: bytesLoaded ? Math.round(bytesLoaded / (1024 * 1024)) : MODEL_TOTAL_MB,
+    totalMB: bytesTotal ? Math.round(bytesTotal / (1024 * 1024)) : MODEL_TOTAL_MB,
     backend: currentBackend,
     message: `Ready (${currentBackend.toUpperCase()})`,
   })
@@ -382,14 +408,15 @@ export async function initVisionModel(
 export async function extractReceiptData(
   imageSource: string | HTMLCanvasElement | Blob,
   model?: any,
-  onProgress?: (p: ModelProgress) => void
+  onProgress?: (p: ModelProgress) => void,
+  modelSource: string = HF_MODEL_REPO
 ): Promise<InferenceResult> {
   const startTime = performance.now()
 
   // Auto-healing: If model reference was not provided or not ready, automatically initialize
   let activeEngine = model || getCachedVisionModel()
   if (!activeEngine || (!activeEngine.ready && !activeEngine.isMock)) {
-    activeEngine = await initVisionModel(onProgress)
+    activeEngine = await initVisionModel(onProgress, modelSource)
   }
 
   let rawExtractedText = ""
